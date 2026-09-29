@@ -199,6 +199,11 @@
     display: flex;
     align-items: center;
   }
+  .ball-mark {
+    font-weight: 700;
+    color: #b7791f;
+    margin-left: 1px;
+  }
   .chip.cut {
     border-color: var(--red-border);
     background: var(--red-bg);
@@ -362,7 +367,7 @@
   <div class="controls">
     <div class="field" style="flex: 1; min-width: 240px;">
       <label for="sheetUrl">Roster file Google sheet url</label>
-      <input type="url" id="sheetUrl" placeholder="https://docs.google.com/spreadsheets/d/..." value="https://docs.google.com/spreadsheets/d/1chPgcHE0WMHBzqYFdXXB4RAGKUGDPmyMSELh5KYs17w/edit?usp=sharing">
+      <input type="url" id="sheetUrl" placeholder="https://docs.google.com/spreadsheets/d/..." value="https://docs.google.com/spreadsheets/d/1chPgcHE0WMHBzqYFdXXB4RAGKUGDPmyMSELh5KYs17w/edit?usp=drive_link">
     </div>
     <div class="field">
       <button id="loadSheetBtn">Load from Google Sheet</button>
@@ -386,7 +391,7 @@
     </div>
     <div class="field">
       <label>&nbsp;</label>
-      <span class="file-hint">Optional. Any columns are accepted for now — this will be used for a future feature.</span>
+      <span class="file-hint">Optional. Columns: Name, then one column per past date holding that week's court number. Add a * to a cell (e.g. 3*) to mark who brought balls that week — used to pick who brings balls today.</span>
     </div>
   </div>
 
@@ -395,7 +400,7 @@
   <div class="controls">
     <div class="field" style="flex: 1; min-width: 240px;">
       <label for="pastPlaySheetUrl">Past Play Google Sheet URL</label>
-      <input type="url" id="pastPlaySheetUrl" placeholder="https://docs.google.com/spreadsheets/d/..." value="https://docs.google.com/spreadsheets/d/16Bac95620Pg-euiz16EVSMX8hm1L3veozzgxvECoPCc/edit?usp=sharing">
+      <input type="url" id="pastPlaySheetUrl" placeholder="https://docs.google.com/spreadsheets/d/..." value="https://docs.google.com/spreadsheets/d/16Bac95620Pg-euiz16EVSMX8hm1L3veozzgxvECoPCc/edit?gid=0#gid=0">
     </div>
     <div class="field">
       <button id="loadPastPlaySheetBtn">Load from Google Sheet</button>
@@ -425,6 +430,7 @@
 <div class="legend">
   <div class="legend-item"><span class="swatch green"></span> Meets the selected Organized Play spec (and has exactly 4 players)</div>
   <div class="legend-item"><span class="swatch red"></span> Does not meet the spec, or does not have exactly 4 players</div>
+  <div class="legend-item"><strong class="ball-mark">*</strong> Brings a fresh can of balls for that court (whoever has gone longest since last bringing them, per Past Play)</div>
   <div class="legend-item"><span class="swatch blue"></span> This exact 4-player group appears in the loaded Past Play data (hover a court for dates)</div>
 </div>
 
@@ -444,10 +450,10 @@
   // manually (a manual move overrides the automatic cut).
   let benchedBySignupCut = new Set();
 
-  const EXAMPLE_SHEET_URL = 'https://docs.google.com/spreadsheets/d/1chPgcHE0WMHBzqYFdXXB4RAGKUGDPmyMSELh5KYs17w/edit?usp=sharing';
+  const EXAMPLE_SHEET_URL = 'https://docs.google.com/spreadsheets/d/1chPgcHE0WMHBzqYFdXXB4RAGKUGDPmyMSELh5KYs17w/edit?usp=drive_link';
 
   /** Most recently loaded Past Play records, as an array of objects keyed by
-   *  column header. Not consumed anywhere yet — reserved for a future feature. */
+   *  column header. Used to flag repeat groupings and to pick ball bringers. */
   let pastPlayRecords = [];
 
   const fileInput = document.getElementById('csvFile');
@@ -749,7 +755,10 @@
       records.push(rec);
     }
     pastPlayRecords = records;
-    pastPlayStatusLine.innerHTML = `<strong>${records.length}</strong> past play record(s) loaded.`;
+    const ballHistory = buildBallHistory();
+    const ballCans = [...ballHistory.history.values()].reduce((n, h) => n + h.count, 0);
+    pastPlayStatusLine.innerHTML = `<strong>${records.length}</strong> past play record(s) loaded &middot; ` +
+      `<strong>${ballHistory.numDates}</strong> date(s) &middot; <strong>${ballCans}</strong> past ball-bringer mark(s) (*) found.`;
     render(); // re-check the current courts against the newly loaded history
   }
 
@@ -758,18 +767,41 @@
   // one row per player, one column per week, cell value is that week's court/group
   // id (blank if the player didn't play that week). Turns that into a flat list of
   // historical 4-player groupings, one per non-empty group id per date column.
-  function buildPastConfigurations() {
-    if (!pastPlayRecords.length) return [];
+  // A * in a cell (e.g. "3*") marks the player who brought a fresh can of
+  // balls to that court that week; it's ignored when matching group ids.
+  const BALL_MARK = '*';
+
+  function stripBallMark(val) {
+    return (val || '').split(BALL_MARK).join('').trim();
+  }
+
+  // Returns { nameKey, dateCols } with dateCols oldest-first: sorted by date
+  // if every header parses as one, otherwise left-to-right column order.
+  function pastPlayColumns() {
+    if (!pastPlayRecords.length) return null;
     const headers = Object.keys(pastPlayRecords[0]);
     const nameKey = headers.find(h => h.trim().toLowerCase() === 'name') || headers[0];
-    const dateCols = headers.filter(h => h !== nameKey);
+    let dateCols = headers.filter(h => h !== nameKey);
+    const times = dateCols.map(h => Date.parse(h));
+    if (times.every(t => !isNaN(t))) {
+      dateCols = dateCols.map((h, i) => ({ h, t: times[i] }))
+        .sort((a, b) => a.t - b.t)
+        .map(x => x.h);
+    }
+    return { nameKey, dateCols };
+  }
+
+  function buildPastConfigurations() {
+    const cols = pastPlayColumns();
+    if (!cols) return [];
+    const { nameKey, dateCols } = cols;
 
     const configs = [];
     dateCols.forEach(dateLabel => {
       const groups = new Map(); // group id (as typed in that column) -> Set(player name)
       pastPlayRecords.forEach(rec => {
         const name = (rec[nameKey] || '').trim();
-        const groupId = (rec[dateLabel] || '').trim();
+        const groupId = stripBallMark(rec[dateLabel]);
         if (!name || !groupId) return;
         if (!groups.has(groupId)) groups.set(groupId, new Set());
         groups.get(groupId).add(name);
@@ -793,6 +825,59 @@
     if (players.length !== COURT_SIZE || !pastConfigs.length) return [];
     const nameSet = new Set(players.map(p => p.name.trim()));
     return pastConfigs.filter(cfg => namesMatch(cfg.names, nameSet)).map(cfg => cfg.date);
+  }
+
+  // ---------- Ball roster ----------
+  // Per player name: how many times they've brought balls and the most recent
+  // date (as an index into the oldest-first date columns) they did.
+  function buildBallHistory() {
+    const history = new Map();
+    const cols = pastPlayColumns();
+    if (!cols) return { history, numDates: 0 };
+    cols.dateCols.forEach((dateLabel, idx) => {
+      pastPlayRecords.forEach(rec => {
+        const name = (rec[cols.nameKey] || '').trim();
+        if (!name || !(rec[dateLabel] || '').includes(BALL_MARK)) return;
+        const h = history.get(name) || { count: 0, lastIdx: -1, lastDate: null };
+        h.count++;
+        h.lastIdx = idx;
+        h.lastDate = dateLabel;
+        history.set(name, h);
+      });
+    });
+    return { history, numDates: cols.dateCols.length };
+  }
+
+  // Weeks since the player last brought balls; Infinity if never (per the
+  // loaded Past Play data), so they're first in line.
+  function weeksSinceBalls(player, ballHistory) {
+    const h = ballHistory.history.get(player.name.trim());
+    return h ? ballHistory.numDates - h.lastIdx : Infinity;
+  }
+
+  function compareNum(a, b) {
+    return a < b ? -1 : a > b ? 1 : 0;
+  }
+
+  // Picks one player per court to bring a fresh can: whoever has gone the
+  // longest since last bringing balls, then whoever has brought them the
+  // fewest times overall, then the earliest sign-up. With no Past Play data
+  // everyone ties on the first two, so it falls to the earliest sign-up.
+  function pickBallBringer(players, ballHistory) {
+    if (!players.length) return null;
+    const count = p => (ballHistory.history.get(p.name.trim()) || { count: 0 }).count;
+    return [...players].sort((a, b) =>
+      compareNum(weeksSinceBalls(b, ballHistory), weeksSinceBalls(a, ballHistory)) ||
+      compareNum(count(a), count(b)) ||
+      compareNum(a.signupOrder ?? Infinity, b.signupOrder ?? Infinity) ||
+      a.name.localeCompare(b.name)
+    )[0];
+  }
+
+  function ballTooltip(player, ballHistory) {
+    const h = ballHistory.history.get(player.name.trim());
+    const last = h ? `last brought them on ${h.lastDate}` : 'no record of bringing them before';
+    return `Bringing a fresh can of balls (${last})`;
   }
 
   function handlePastPlayFile(e) {
@@ -1063,9 +1148,11 @@
     ctx.fillStyle = muted;
     ctx.font = `13px ${UI_FONT}`;
     const stamp = new Date().toLocaleString();
-    ctx.fillText(`Organized Play: ${specLabel(mode)}  ·  Generated ${stamp}`, PAD, PAD + 32);
+    ctx.fillText(`Organized Play: ${specLabel(mode)}  ·  * = brings a fresh can of balls  ·  Generated ${stamp}`, PAD, PAD + 32);
 
+    const ballHistory = buildBallHistory();
     boxes.forEach((players, i) => {
+      const bringer = pickBallBringer(players, ballHistory);
       const col = i % COLS;
       const row = Math.floor(i / COLS);
       const x = PAD + col * (CELL_W + GAP);
@@ -1097,7 +1184,7 @@
         ctx.stroke();
         ctx.fillStyle = ink;
         ctx.font = chipFont;
-        ctx.fillText(p.name, x + 14 + chipPadX, py + 8);
+        ctx.fillText(p === bringer ? `${p.name}*` : p.name, x + 14 + chipPadX, py + 8);
         py += chipRowH;
       });
     });
@@ -1209,11 +1296,13 @@
   }
 
   // ---------- Rendering ----------
-  function chipHtml(player, from) {
+  function chipHtml(player, from, ballTitle) {
     const isSelected = selected && selected.playerId === player.id;
     const isCut = benchedBySignupCut.has(player.id);
-    return `<div class="chip${isSelected ? ' selected' : ''}${isCut ? ' cut' : ''}" data-id="${player.id}" data-from="${from}">
-      ${escapeHtml(player.name)}, ${escapeHtml(player.sex)}, ${escapeHtml(player.level)}
+    const titleAttr = ballTitle ? ` title="${escapeHtml(ballTitle)}"` : '';
+    const ballMark = ballTitle ? '<span class="ball-mark">*</span>' : '';
+    return `<div class="chip${isSelected ? ' selected' : ''}${isCut ? ' cut' : ''}" data-id="${player.id}" data-from="${from}"${titleAttr}>
+      ${escapeHtml(player.name)}${ballMark}, ${escapeHtml(player.sex)}, ${escapeHtml(player.level)}
     </div>`;
   }
 
@@ -1248,8 +1337,10 @@
 
     courtsGrid.innerHTML = '';
     const pastConfigs = buildPastConfigurations();
+    const ballHistory = buildBallHistory();
     boxes.forEach((players, i) => {
       const ok = boxSpecOk(players, mode);
+      const bringer = pickBallBringer(players, ballHistory);
       const pastDates = pastDatesForCourt(players, pastConfigs);
       const isRepeat = pastDates.length > 0;
       const court = document.createElement('div');
@@ -1264,7 +1355,8 @@
           <div class="court-badge ${ok ? 'ok' : 'bad'}">${ok ? 'OK' : 'NEEDS FIX'}</div>
         </div>
         <div class="court-count">${players.length} / ${COURT_SIZE} players</div>
-        <div class="player-list">${players.map(p => chipHtml(p, i)).join('')}</div>
+        <div class="player-list">${players.map(p =>
+          chipHtml(p, i, p === bringer ? ballTooltip(p, ballHistory) : null)).join('')}</div>
       `;
       attachContainerHandlers(court, i);
       courtsGrid.appendChild(court);
