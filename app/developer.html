@@ -1,0 +1,422 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>STA Developer Area</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<header>
+  <h1>Developer area</h1>
+  <div class="who">
+    <span id="whoEmail"></span>
+    <a href="scheduler.html">Scheduler</a>
+    <a href="./">Member page</a>
+    <button class="secondary" id="signOutBtn">Sign out</button>
+  </div>
+</header>
+
+<div id="guardMsg"></div>
+
+<div id="devContent" hidden>
+  <section class="panel" id="clockPanel" hidden>
+    <div class="panel-title">Test clock (local testing only)</div>
+    <p class="muted">The app is pretending it's <strong id="clockNow"></strong>. Deadlines, sign-up order and the sign-up page all follow this clock.</p>
+    <div class="row">
+      <label>Pretend it's (your Mac's time zone)
+        <input type="datetime-local" id="clockInput" step="60"></label>
+      <button id="clockSetBtn">Set</button>
+      <button class="secondary" id="clockRealBtn">Use real time</button>
+    </div>
+    <div class="row" style="margin-top:10px" id="clockPresets"></div>
+    <div class="row" style="margin-top:14px">
+      <label>Simulate sign-ups
+        <input type="number" id="simCount" min="1" max="100" value="10" style="width:80px"></label>
+      <button class="secondary" id="simBtn">Sign up random players</button>
+      <button class="danger" id="clearSignupsBtn">Clear this week's sign-ups</button>
+    </div>
+    <div class="row" style="margin-top:14px">
+      <button class="secondary" id="runTasksBtn">Run timed tasks now</button>
+      <span class="muted">Online, these run automatically every few minutes: the 5pm lock reminder and the 8pm court and no-spot emails. Emails land in the test inbox.</span>
+    </div>
+    <p class="muted">Simulated players sign up one minute apart, ending at the test clock's time. Sign-ups must be open on the test clock.</p>
+    <div id="clockMsg"></div>
+  </section>
+
+  <section class="panel">
+    <div class="panel-title">This week</div>
+    <div id="weekInfo"></div>
+    <div class="row" style="margin:10px 0">
+      <label>Courts
+        <select id="courtsSelect">
+          <option>1</option><option>2</option><option>3</option><option>4</option>
+          <option>5</option><option>6</option><option>7</option>
+        </select></label>
+      <button id="courtsSaveBtn">Save</button>
+    </div>
+    <div class="table-wrap" id="lineup"></div>
+    <div id="weekMsg"></div>
+  </section>
+
+  <section class="panel">
+    <div class="panel-title">Contacts after the Saturday cutoff</div>
+    <p class="muted">Shown to members once sign-ups close, and used in the weekly play-invite email.</p>
+    <div class="row">
+      <label style="flex:1; min-width:240px">Emails, separated by commas
+        <input id="contactsInput" placeholder="name@example.com, other@example.com"></label>
+      <button id="contactsSaveBtn">Save</button>
+    </div>
+    <div id="contactsMsg"></div>
+  </section>
+
+  <section class="panel">
+    <div class="panel-title">Message for lapsed members</div>
+    <p class="muted">Shown to members whose membership hasn't been renewed when they try to sign up.</p>
+    <div class="row">
+      <label style="flex:1; min-width:240px">Message
+        <textarea id="duesInput" rows="3" style="font:inherit;font-size:14px;padding:8px 9px;border:1px solid #cbd2d9;border-radius:6px"></textarea></label>
+      <button id="duesSaveBtn">Save</button>
+    </div>
+    <div id="duesMsg"></div>
+  </section>
+
+  <section class="panel">
+    <div class="panel-title">Members</div>
+    <p class="muted">Add a player to a new email, or to an existing email to link a family member. Then send the setup-invite so they can set a password.
+      Members stay on this list once they have an account. Mark a member <em>lapsed</em> if they haven't renewed: they keep their account but can't sign up until they're marked current again.</p>
+    <form id="addForm" class="row">
+      <label>Email <input type="email" id="addEmail" required></label>
+      <label>First name <input id="addFirst" required></label>
+      <label>Last name <input id="addLast" required></label>
+      <label>Level <input id="addLevel" size="4" placeholder="3.5"></label>
+      <label>Sex
+        <select id="addSex"><option value="">?</option><option>M</option><option>F</option></select></label>
+      <label class="check"><input type="checkbox" id="addDev"> Developer</label>
+      <button type="submit">Add</button>
+    </form>
+    <div class="row" style="margin-top:12px">
+      <button class="secondary" id="inviteAllBtn">Invite all current members not yet invited</button>
+      <span class="muted" id="inviteAllHint"></span>
+    </div>
+    <div class="row" style="margin-top:12px">
+      <label>Show
+        <select id="memberFilter">
+          <option value="all">All members</option>
+          <option value="needs_invite">Current members without an account</option>
+          <option value="active">Has an account</option>
+          <option value="lapsed">Lapsed</option>
+        </select></label>
+      <span class="muted" id="memberCounts"></span>
+    </div>
+    <div id="membersMsg"></div>
+    <div class="table-wrap" id="members" style="margin-top:12px"></div>
+  </section>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/dist/umd/supabase.js"
+        integrity="sha384-Rj26LVGvoeRVR6+mwQmFfcR3QOBEwT+ZmuCWpuiqeTzJpCs0ER4ITAWGb4Hiy3Ok"
+        crossorigin="anonymous"></script>
+<script src="config.js"></script>
+<script src="common.js"></script>
+<script>
+(function () {
+  const { client, esc, rpc, fmtDateTime, fmtPlayDate, showMessage } = STA;
+  const $ = id => document.getElementById(id);
+  let week = null;
+
+  async function start() {
+    const { data: { session } } = await client.auth.getSession();
+    if (!session) { location.href = './'; return; }
+    $('whoEmail').textContent = session.user.email;
+    if (!(await rpc('is_developer'))) {
+      showMessage($('guardMsg'), 'This area is for developers only.');
+      return;
+    }
+    $('devContent').hidden = false;
+    await Promise.all([loadWeek(), loadMembers()]);
+  }
+
+  // ---------- Test clock and this week ----------
+  async function loadWeek() {
+    try {
+      week = await rpc('dev_week');
+    } catch (err) { showMessage($('weekMsg'), err.message); return; }
+
+    $('clockPanel').hidden = !week.settings.test_mode;
+    if (document.activeElement !== $('duesInput')) $('duesInput').value = week.settings.dues_message || '';
+    if (document.activeElement !== $('contactsInput')) {
+      $('contactsInput').value = (week.settings.contact_emails || []).join(', ');
+    }
+    $('clockNow').textContent = fmtDateTime(week.now);
+    const s = week.session;
+    if (s) {
+      const minute = 60000;
+      const presets = [
+        ['Before sign-ups open', new Date(new Date(s.signups_open_at) - minute)],
+        ['Mon 9:00am (open)', new Date(s.signups_open_at)],
+        ['Sat 11:59am', new Date(new Date(s.signups_close_at) - minute)],
+        ['Sat 12:00pm (closed)', new Date(s.signups_close_at)],
+        ['Sat 3:00pm', new Date(new Date(s.signups_close_at).getTime() + 180 * minute)],
+        ['Sat 5:00pm', new Date(new Date(s.signups_close_at).getTime() + 300 * minute)],
+        ['Sat 8:00pm (final)', new Date(s.courts_publish_at)]
+      ];
+      $('clockPresets').innerHTML = presets.map(([label, d]) =>
+        `<button class="secondary" data-clock="${d.toISOString()}">${esc(label)}</button>`).join('');
+    }
+
+    if (!s) {
+      $('weekInfo').innerHTML = '<p class="muted">No upcoming Sunday session (outside the season?).</p>';
+      $('lineup').innerHTML = '';
+      return;
+    }
+    const spots = week.lineup.filter(l => l.has_spot).length;
+    $('weekInfo').innerHTML = `<h2>${esc(fmtPlayDate(s.play_date))}</h2>
+      <p>${s.locked_at ? `<strong>Courts locked</strong> by ${esc(s.locked_by)}.` : 'Courts not locked yet.'}
+        ${s.published_at ? `Emails sent ${esc(fmtDateTime(s.published_at))}.` : ''}
+        <a href="scheduler.html">Open the Scheduler</a></p>
+      <p class="muted">Sign-ups ${esc(fmtDateTime(s.signups_open_at))} to ${esc(fmtDateTime(s.signups_close_at))}
+      &middot; ${spots} of ${s.num_courts * 4} spots filled &middot; ${week.lineup.length - spots} on the waitlist</p>`;
+    $('courtsSelect').value = String(s.num_courts);
+
+    $('lineup').innerHTML = week.lineup.length ? `<table>
+      <tr><th>#</th><th>Player</th><th>Level</th><th>Sex</th><th>Signed up</th><th>Status</th><th></th></tr>
+      ${week.lineup.map(l => `<tr class="${l.has_spot ? '' : 'waitlist'}">
+        <td>${l.place}</td><td>${esc(l.name)}</td><td>${esc(l.level || '?')}</td><td>${esc(l.sex || '?')}</td>
+        <td>${esc(fmtDateTime(l.signed_up_at))}</td>
+        <td>${l.has_spot ? 'Spot' : 'Waitlist #' + l.waitlist_place}</td>
+        <td><button class="danger" data-remove="${l.signup_id}" data-name="${esc(l.name)}">Remove</button></td>
+      </tr>`).join('')}
+    </table>` : '<p class="muted">No sign-ups yet.</p>';
+  }
+
+  $('clockPresets').addEventListener('click', e => {
+    const b = e.target.closest('button[data-clock]');
+    if (b) setClock(b.dataset.clock);
+  });
+  $('clockSetBtn').addEventListener('click', () => {
+    if (!$('clockInput').value) return;
+    setClock(new Date($('clockInput').value).toISOString());
+  });
+  $('clockRealBtn').addEventListener('click', () => setClock(null));
+
+  $('simBtn').addEventListener('click', async () => {
+    showMessage($('clockMsg'), '');
+    try {
+      const added = await rpc('dev_simulate_signups', { p_count: Number($('simCount').value) });
+      showMessage($('clockMsg'), `Signed up ${added} random player(s).`, 'ok');
+    } catch (err) { showMessage($('clockMsg'), err.message); }
+    await loadWeek();
+  });
+
+  $('clearSignupsBtn').addEventListener('click', async () => {
+    if (!confirm("Delete ALL sign-ups for this Sunday, including real ones made while testing?")) return;
+    showMessage($('clockMsg'), '');
+    try {
+      await rpc('dev_clear_signups');
+      showMessage($('clockMsg'), "This week's sign-ups were cleared.", 'ok');
+    } catch (err) { showMessage($('clockMsg'), err.message); }
+    await loadWeek();
+  });
+
+  $('runTasksBtn').addEventListener('click', async () => {
+    showMessage($('clockMsg'), '');
+    const { data, error } = await client.functions.invoke('timed-tasks', { body: {} });
+    if (error) {
+      let msg = error.message;
+      try { msg = (await error.context.json()).error || msg; } catch (_) { /* keep generic message */ }
+      showMessage($('clockMsg'), msg);
+    } else {
+      const what = { lock_reminder: '5pm lock reminder', publish: '8pm court and no-spot emails', not_locked_alert: '8pm "not locked" alert' };
+      showMessage($('clockMsg'), data.tasks.length
+        ? `Ran: ${data.tasks.map(t => what[t] || t).join(', ')}. Sent ${data.sent} email(s)` +
+          (data.failed.length ? `; ${data.failed.length} failed: ${data.failed.join('; ')}` : '.')
+        : 'Nothing was due at this time.', data.failed.length ? 'error' : 'ok');
+    }
+    await loadWeek();
+  });
+
+  async function setClock(iso) {
+    showMessage($('clockMsg'), '');
+    try { await rpc('dev_set_test_clock', { p_clock: iso }); }
+    catch (err) { showMessage($('clockMsg'), err.message); }
+    await loadWeek();
+  }
+
+  $('contactsSaveBtn').addEventListener('click', async () => {
+    const emails = $('contactsInput').value.split(',').map(e => e.trim().toLowerCase()).filter(Boolean);
+    const bad = emails.filter(e => !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(e));
+    if (bad.length) { showMessage($('contactsMsg'), `Not a valid email: ${bad.join(', ')}`); return; }
+    const { error } = await client.from('settings').update({ contact_emails: emails }).eq('id', true);
+    showMessage($('contactsMsg'), error ? error.message : 'Contacts saved.', error ? 'error' : 'ok');
+    await loadWeek();
+  });
+
+  $('courtsSaveBtn').addEventListener('click', async () => {
+    showMessage($('weekMsg'), '');
+    try {
+      await rpc('dev_set_num_courts', { p_session_id: week.session.id, p_num_courts: Number($('courtsSelect').value) });
+      showMessage($('weekMsg'), 'Court count saved.', 'ok');
+    } catch (err) { showMessage($('weekMsg'), err.message); }
+    await loadWeek();
+  });
+
+  $('lineup').addEventListener('click', async e => {
+    const b = e.target.closest('button[data-remove]');
+    if (!b) return;
+    if (!confirm(`Remove ${b.dataset.name} from this week? This is recorded as a developer removal.`)) return;
+    try { await rpc('dev_remove_signup', { p_signup_id: Number(b.dataset.remove) }); }
+    catch (err) { showMessage($('weekMsg'), err.message); }
+    await loadWeek();
+  });
+
+  // ---------- Members ----------
+  let notInvited = [];
+
+  let memberRows = [];
+
+  async function loadMembers() {
+    const [{ data: accounts, error: e1 }, { data: players, error: e2 }] = await Promise.all([
+      client.rpc('dev_members'),
+      client.from('players').select('id, account_email, first_name, last_name, level, sex, active').order('last_name')
+    ]);
+    if (e1 || e2) { showMessage($('membersMsg'), (e1 || e2).message); return; }
+    const byEmail = new Map(accounts.map(a => [a.email, { ...a, players: [] }]));
+    players.forEach(p => byEmail.get(p.account_email)?.players.push(p));
+    // Members who need attention first: current without an account, then
+    // invited but not accepted, then with an account, then lapsed.
+    const rank = a => !a.active ? 4 : !a.membership_current ? 3 : { not_invited: 0, invited: 1, active: 2 }[a.signin_status];
+    const lastName = a => (a.players[0]?.last_name || a.email).toLowerCase();
+    memberRows = [...byEmail.values()]
+      .sort((a, b) => rank(a) - rank(b) || lastName(a).localeCompare(lastName(b)));
+
+    const needsInvite = a => a.active && a.membership_current && a.signin_status !== 'active';
+    notInvited = memberRows.filter(a => a.active && a.membership_current && a.signin_status === 'not_invited').map(a => a.email);
+    $('inviteAllBtn').disabled = notInvited.length === 0;
+    $('inviteAllHint').textContent = notInvited.length
+      ? `${notInvited.length} current member(s) not invited yet. Invites that weren't accepted are resent one at a time below.`
+      : 'Every current member has been invited.';
+    $('memberCounts').textContent =
+      `${memberRows.length} members: ${memberRows.filter(needsInvite).length} current without an account, ` +
+      `${memberRows.filter(a => a.signin_status === 'active').length} with an account, ` +
+      `${memberRows.filter(a => !a.membership_current).length} lapsed`;
+    renderMembers();
+  }
+
+  function renderMembers() {
+    const f = $('memberFilter').value;
+    const rows = memberRows.filter(a =>
+      f === 'all' ? true :
+      f === 'needs_invite' ? a.active && a.membership_current && a.signin_status !== 'active' :
+      f === 'active' ? a.signin_status === 'active' :
+      !a.membership_current);
+
+    $('members').innerHTML = rows.length ? `<table>
+      <tr><th>Email</th><th>Players</th><th>Membership</th><th>Account</th><th></th></tr>
+      ${rows.map(a => `<tr>
+        <td>${esc(a.email)}${a.is_developer ? ' <span class="badge none">developer</span>' : ''}${a.active ? '' : ' <span class="badge wait">removed</span>'}</td>
+        <td>${a.players.map(p => `${esc(p.first_name)} ${esc(p.last_name)} <span class="muted">(${esc(p.level || '?')}, ${esc(p.sex || '?')})</span>`).join('<br>')}</td>
+        <td>${a.membership_current ? 'Current' : '<span class="badge wait">Lapsed</span>'}
+          <a class="link-button" data-membership="${esc(a.email)}" data-current="${a.membership_current}">${a.membership_current ? 'Mark lapsed' : 'Mark current'}</a></td>
+        <td>${{
+          active: 'Has account',
+          invited: `<span class="muted">Invited ${esc(fmtDateTime(a.invited_at))}, not accepted yet</span>`,
+          not_invited: '<span class="muted">No account yet</span>'
+        }[a.signin_status]}</td>
+        <td>${a.signin_status === 'active' || !a.membership_current || !a.active ? '' :
+          `<button class="secondary" data-invite="${esc(a.email)}">${a.signin_status === 'invited' ? 'Resend invite' : 'Send invite'}</button>`}</td>
+      </tr>`).join('')}
+    </table>` : '<p class="muted">No members match this filter.</p>';
+  }
+
+  $('memberFilter').addEventListener('change', renderMembers);
+
+  $('duesSaveBtn').addEventListener('click', async () => {
+    const text = $('duesInput').value.trim();
+    if (!text) { showMessage($('duesMsg'), 'The message cannot be empty.'); return; }
+    const { error } = await client.from('settings').update({ dues_message: text }).eq('id', true);
+    showMessage($('duesMsg'), error ? error.message : 'Message saved.', error ? 'error' : 'ok');
+  });
+
+  $('addForm').addEventListener('submit', async e => {
+    e.preventDefault();
+    showMessage($('membersMsg'), '');
+    const email = $('addEmail').value.trim().toLowerCase();
+    const { error: accErr } = await client.from('accounts')
+      .upsert({ email, is_developer: $('addDev').checked }, { onConflict: 'email', ignoreDuplicates: true });
+    if (accErr) { showMessage($('membersMsg'), accErr.message); return; }
+    const { error } = await client.from('players').insert({
+      account_email: email,
+      first_name: $('addFirst').value.trim(),
+      last_name: $('addLast').value.trim(),
+      level: $('addLevel').value.trim() || null,
+      sex: $('addSex').value || null
+    });
+    if (error) { showMessage($('membersMsg'), error.message); return; }
+    showMessage($('membersMsg'), `Added ${$('addFirst').value} ${$('addLast').value}.`, 'ok');
+    $('addForm').reset();
+    await loadMembers();
+  });
+
+  // Returns null on success, or the error message.
+  async function sendInvite(email) {
+    const { error } = await client.functions.invoke('invite-member', {
+      body: { email, redirectTo: new URL('./', location.href).href }
+    });
+    if (!error) return null;
+    try { return (await error.context.json()).error || error.message; }
+    catch (_) { return error.message; }
+  }
+
+  $('members').addEventListener('click', async e => {
+    const m = e.target.closest('[data-membership]');
+    if (m) {
+      const makeCurrent = m.dataset.current !== 'true';
+      const { error } = await client.from('accounts')
+        .update({ membership_current: makeCurrent }).eq('email', m.dataset.membership);
+      showMessage($('membersMsg'), error ? error.message
+        : `${m.dataset.membership} marked ${makeCurrent ? 'current' : 'lapsed'}.`, error ? 'error' : 'ok');
+      await loadMembers();
+      return;
+    }
+    const b = e.target.closest('button[data-invite]');
+    if (!b) return;
+    b.disabled = true;
+    showMessage($('membersMsg'), '');
+    const err = await sendInvite(b.dataset.invite);
+    if (err) { showMessage($('membersMsg'), err); b.disabled = false; return; }
+    showMessage($('membersMsg'), `Invite sent to ${b.dataset.invite}. The link works for 24 hours.`, 'ok');
+    await loadMembers();
+  });
+
+  // One at a time, so a problem with one email doesn't stop the rest and the
+  // email service isn't flooded.
+  $('inviteAllBtn').addEventListener('click', async () => {
+    const emails = [...notInvited];
+    if (!emails.length) return;
+    if (!confirm(`Send setup-invite emails to ${emails.length} current member(s) who haven't been invited yet?`)) return;
+    $('inviteAllBtn').disabled = true;
+    const failed = [];
+    for (let i = 0; i < emails.length; i++) {
+      showMessage($('membersMsg'), `Sending invite ${i + 1} of ${emails.length}…`, 'ok');
+      const err = await sendInvite(emails[i]);
+      if (err) failed.push(`${emails[i]}: ${err}`);
+    }
+    const sent = emails.length - failed.length;
+    showMessage($('membersMsg'),
+      `Sent ${sent} invite(s).` + (failed.length ? ` ${failed.length} failed: ${failed.join('; ')}` : ''),
+      failed.length ? 'error' : 'ok');
+    await loadMembers();
+  });
+
+  $('signOutBtn').addEventListener('click', async () => {
+    await client.auth.signOut();
+    location.href = './';
+  });
+
+  start().catch(err => showMessage($('guardMsg'), err.message));
+})();
+</script>
+</body>
+</html>

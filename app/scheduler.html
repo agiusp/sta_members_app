@@ -1,0 +1,492 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>STA Scheduler</title>
+<link rel="stylesheet" href="styles.css">
+<style>
+  body { max-width: 1100px; }
+  .courts-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
+    margin-bottom: 18px;
+  }
+  @media (max-width: 760px) { .courts-grid { grid-template-columns: 1fr; } }
+  .court {
+    border-radius: 10px;
+    border: 2px solid var(--red-border);
+    background: var(--red-bg);
+    min-height: 190px;
+    padding: 12px;
+    display: flex;
+    flex-direction: column;
+  }
+  .court.valid { border-color: var(--green-border); background: var(--green-bg); }
+  .court.repeat { position: relative; box-shadow: 0 0 0 3px var(--accent); }
+  .court.repeat::after {
+    content: attr(data-tooltip);
+    position: absolute; left: 50%; bottom: 100%; transform: translateX(-50%);
+    margin-bottom: 10px; background: #1c4a73; color: #fff; font-size: 12px;
+    padding: 8px 10px; border-radius: 6px; width: max-content; max-width: 240px;
+    opacity: 0; visibility: hidden; transition: opacity 0.15s; z-index: 30; pointer-events: none;
+  }
+  .court.repeat:hover::after, .court.repeat:focus-visible::after { opacity: 1; visibility: visible; }
+  .court-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+  .court-title { font-weight: 700; font-size: 14px; }
+  .court-badge { font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 20px; color: #fff; }
+  .court-badge.ok { background: var(--green-border); }
+  .court-badge.bad { background: var(--red-border); }
+  .court-count { font-size: 11px; color: var(--muted); margin-bottom: 6px; }
+  .player-list { display: flex; flex-direction: column; gap: 6px; flex: 1; }
+  .chip {
+    background: #fff; border: 1px solid #d5d9de; border-radius: 6px; padding: 8px 10px;
+    font-size: 13px; cursor: pointer; user-select: none; touch-action: manipulation;
+    min-height: 40px; display: flex; align-items: center; gap: 6px;
+  }
+  .locked .chip { cursor: default; }
+  .chip.cut { border-color: var(--red-border); background: var(--red-bg); }
+  .chip.wait { border-color: var(--amber-border); background: var(--amber-bg); }
+  .chip.selected { border-color: var(--accent); background: #eaf2fb; box-shadow: 0 0 0 2px var(--accent); }
+  .chip .tag { font-size: 11px; font-weight: 700; color: #6b4511; }
+  .ball-mark { font-weight: 700; color: #b7791f; }
+  .court.droppable, .bench.droppable { outline: 2px dashed var(--accent); outline-offset: 2px; cursor: pointer; }
+  .move-hint {
+    position: sticky; top: 8px; z-index: 5; background: #eaf2fb; border: 1px solid var(--accent);
+    color: #1c4a73; padding: 10px 14px; border-radius: 8px; font-size: 13px; margin-bottom: 14px;
+    display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: space-between;
+  }
+  .bench { border: 2px dashed #b0b8c1; background: #fbfbfc; }
+  .bench-list { display: flex; flex-wrap: wrap; gap: 8px; }
+  .legend { display: flex; gap: 18px; font-size: 12px; color: var(--muted); margin-top: 10px; flex-wrap: wrap; }
+  .legend-item { display: flex; align-items: center; gap: 6px; }
+  .swatch { width: 12px; height: 12px; border-radius: 3px; display: inline-block; }
+  .swatch.green { background: var(--green-bg); border: 2px solid var(--green-border); }
+  .swatch.red { background: var(--red-bg); border: 2px solid var(--red-border); }
+  .swatch.blue { background: #fff; box-shadow: 0 0 0 2px var(--accent); }
+  .swatch.amber { background: var(--amber-bg); border: 2px solid var(--amber-border); }
+  .lock-status { font-size: 14px; padding: 10px 12px; border-radius: 6px; margin-bottom: 12px; }
+  .lock-status.open { background: #eef4fb; }
+  .lock-status.locked { background: var(--green-bg); border: 1px solid var(--green-border); }
+  .lock-status.final { background: #f0f1f3; border: 1px solid #b0b8c1; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Scheduler</h1>
+  <div class="who">
+    <a href="developer.html">Developer area</a>
+    <a href="./">Member page</a>
+  </div>
+</header>
+
+<div class="test-banner" id="testBanner" hidden></div>
+<div id="guardMsg"></div>
+
+<div id="content" hidden>
+  <section class="panel">
+    <h2 id="sessionTitle"></h2>
+    <div class="lock-status" id="lockStatus"></div>
+    <div class="row">
+      <label>Organized Play
+        <select id="orgPlay">
+          <option value="same-sex">Same-sex doubles</option>
+          <option value="mixed">Mixed doubles</option>
+          <option value="level">By play level</option>
+          <option value="level-samesex">By play level and same-sex doubles</option>
+          <option value="level-mixed">By play level and mixed doubles</option>
+        </select></label>
+      <button id="autoAssignBtn">Auto-Assign Courts</button>
+      <button class="secondary" id="clearBtn">Clear Courts</button>
+      <button id="lockBtn">Lock courts</button>
+      <button class="secondary" id="unlockBtn" hidden>Unlock</button>
+    </div>
+    <div id="msg"></div>
+  </section>
+
+  <div class="move-hint" id="moveHint" hidden></div>
+  <div class="courts-grid" id="courtsGrid"></div>
+
+  <section class="panel bench" id="benchPanel">
+    <div class="court-header">
+      <div class="court-title">Bench: signed up, not on a court</div>
+      <div class="court-count" id="benchCount"></div>
+    </div>
+    <div class="bench-list" id="benchList"></div>
+  </section>
+
+  <div class="legend">
+    <div class="legend-item"><span class="swatch green"></span> Exactly 4 players who fit the Organized Play format</div>
+    <div class="legend-item"><span class="swatch red"></span> Doesn't fit the format, or not exactly 4 players</div>
+    <div class="legend-item"><span class="swatch blue"></span> These 4 played together on an earlier Sunday (hover for dates)</div>
+    <div class="legend-item"><strong class="ball-mark">*</strong> Brings a fresh can of balls (longest since last bringing them)</div>
+    <div class="legend-item"><span class="swatch amber"></span> On the waitlist</div>
+  </div>
+  <p class="muted">Tap one player, then another, to swap them; or tap a player, then an empty spot, to move them.
+    If a player can't come, swap their replacement in from the bench, then tap the player and choose
+    <em>Remove from this week</em>. Everyone left on the bench gets the "no spot this week" email at 8pm.</p>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/dist/umd/supabase.js"
+        integrity="sha384-Rj26LVGvoeRVR6+mwQmFfcR3QOBEwT+ZmuCWpuiqeTzJpCs0ER4ITAWGb4Hiy3Ok"
+        crossorigin="anonymous"></script>
+<script src="config.js"></script>
+<script src="common.js"></script>
+<script>
+(function () {
+  const { client, esc, rpc, fmtDateTime, fmtPlayDate, showMessage } = STA;
+  const $ = id => document.getElementById(id);
+  const COURT_SIZE = 4;
+
+  let data = null;          // from dev_scheduler_data
+  let byId = new Map();     // player id -> lineup player
+  let boxes = [];           // per court: array of player ids
+  let bench = [];           // player ids
+  let savedBringers = null; // player ids marked brings_balls in saved assignments
+  let cutIds = new Set();   // players with a spot left off courts to make a multiple of 4
+  let selected = null;      // { playerId, from: 'bench' | courtIndex }
+  let history = null;       // derived from data.history
+
+  // ---------- Loading ----------
+  async function start() {
+    const { data: { session } } = await client.auth.getSession();
+    if (!session) { location.href = './'; return; }
+    if (!(await rpc('is_developer'))) { showMessage($('guardMsg'), 'This area is for developers only.'); return; }
+    $('content').hidden = false;
+    await load();
+  }
+
+  async function load() {
+    data = await rpc('dev_scheduler_data');
+    if (!data.session) { showMessage($('guardMsg'), 'There is no upcoming Sunday session.'); $('content').hidden = true; return; }
+    byId = new Map(data.lineup.map(p => [p.id, p]));
+    history = buildHistory(data.history);
+    const n = data.session.num_courts;
+    boxes = Array.from({ length: n }, () => []);
+    savedBringers = null;
+    cutIds = new Set();
+    selected = null;
+    // Start from saved assignments (locked, or kept after an unlock).
+    if (data.assignments.length) {
+      savedBringers = new Set(data.assignments.filter(a => a.brings_balls).map(a => a.player_id));
+      data.assignments
+        .filter(a => byId.has(a.player_id) && a.court <= n)
+        .forEach(a => boxes[a.court - 1].push(a.player_id));
+    }
+    const onCourt = new Set(boxes.flat());
+    bench = data.lineup.filter(p => !onCourt.has(p.id)).map(p => p.id);
+    if (data.session.org_play) $('orgPlay').value = data.session.org_play;
+    render();
+  }
+
+  // ---------- State of the week ----------
+  function state() {
+    const s = data.session, now = new Date(data.now);
+    const final = now >= new Date(s.courts_publish_at);
+    const locked = !!s.locked_at;
+    const beforeCutoff = now < new Date(s.signups_close_at);
+    return { final, locked, beforeCutoff, editable: !final && !locked };
+  }
+
+  // ---------- History: ball roster and repeat groupings ----------
+  function buildHistory(rows) {
+    const dates = [...new Set(rows.map(r => r.play_date))].sort();
+    const balls = new Map(); // player id -> { count, lastIdx, lastDate }
+    const groups = new Map(); // "date|court" -> { date, ids: Set }
+    rows.forEach(r => {
+      const key = r.play_date + '|' + r.court;
+      if (!groups.has(key)) groups.set(key, { date: r.play_date, ids: new Set() });
+      groups.get(key).ids.add(r.player_id);
+      if (r.brings_balls) {
+        const h = balls.get(r.player_id) || { count: 0, lastIdx: -1, lastDate: null };
+        h.count++;
+        const idx = dates.indexOf(r.play_date);
+        if (idx > h.lastIdx) { h.lastIdx = idx; h.lastDate = r.play_date; }
+        balls.set(r.player_id, h);
+      }
+    });
+    const configs = [...groups.values()].filter(g => g.ids.size === COURT_SIZE);
+    return { numDates: dates.length, balls, configs };
+  }
+
+  const weeksSinceBalls = id => {
+    const h = history.balls.get(id);
+    return h ? history.numDates - h.lastIdx : Infinity;
+  };
+  const cmp = (a, b) => (a < b ? -1 : a > b ? 1 : 0);
+
+  // Whoever has gone longest since last bringing balls; then fewest times
+  // overall; then earliest sign-up.
+  function pickBallBringer(ids) {
+    if (!ids.length) return null;
+    const count = id => (history.balls.get(id) || { count: 0 }).count;
+    return [...ids].sort((a, b) =>
+      cmp(weeksSinceBalls(b), weeksSinceBalls(a)) || cmp(count(a), count(b)) ||
+      cmp(byId.get(a).place, byId.get(b).place))[0];
+  }
+
+  function bringerFor(ids) {
+    if (!state().editable && savedBringers) return ids.find(id => savedBringers.has(id)) ?? null;
+    return pickBallBringer(ids);
+  }
+
+  function ballTooltip(id) {
+    const h = history.balls.get(id);
+    return h ? `Brings balls (last brought them ${fmtPlayDate(h.lastDate)})` : 'Brings balls (no record of bringing them before)';
+  }
+
+  function pastDatesForCourt(ids) {
+    if (ids.length !== COURT_SIZE) return [];
+    return history.configs
+      .filter(c => ids.every(id => c.ids.has(id)))
+      .map(c => fmtPlayDate(c.date));
+  }
+
+  // ---------- Organized Play rules (same as the standalone scheduler) ----------
+  function boxSpecOk(ids, mode) {
+    if (ids.length !== COURT_SIZE) return false;
+    const ps = ids.map(id => byId.get(id));
+    const sexes = ps.map(p => p.sex), levels = ps.map(p => p.level);
+    const allSameSex = sexes.every(s => s === sexes[0]);
+    const allSameLevel = levels.every(l => l === levels[0]);
+    const isMixed2v2 = sexes.filter(s => s === 'M').length === 2 && sexes.filter(s => s === 'F').length === 2;
+    return {
+      'same-sex': allSameSex, 'mixed': isMixed2v2, 'level': allSameLevel,
+      'level-samesex': allSameLevel && allSameSex, 'level-mixed': allSameLevel && isMixed2v2
+    }[mode] || false;
+  }
+
+  function groupBy(arr, keyFn) {
+    const map = new Map();
+    arr.forEach(x => { const k = keyFn(x); if (!map.has(k)) map.set(k, []); map.get(k).push(x); });
+    return map;
+  }
+  function chunkInto(list, groups, leftover) {
+    for (let i = 0; i < list.length; i += COURT_SIZE) {
+      const c = list.slice(i, i + COURT_SIZE);
+      if (c.length === COURT_SIZE) groups.push(c); else leftover.push(...c);
+    }
+  }
+  function pairMixed(list, groups, leftover) {
+    const m = list.filter(p => p.sex === 'M'), f = list.filter(p => p.sex === 'F');
+    while (m.length >= 2 && f.length >= 2) groups.push([m.shift(), m.shift(), f.shift(), f.shift()]);
+    leftover.push(...m, ...f);
+  }
+
+  function autoAssign() {
+    const mode = $('orgPlay').value;
+    const n = data.session.num_courts;
+    const withSpot = data.lineup.filter(p => p.has_spot);          // already in sign-up order
+    const usable = withSpot.length - (withSpot.length % COURT_SIZE); // latest sign-ups left off first
+    const pool = withSpot.slice(0, usable);
+    const leftover = withSpot.slice(usable);
+    cutIds = new Set(leftover.map(p => p.id));
+    const groups = [];
+
+    if (mode === 'same-sex') groupBy(pool, p => p.sex).forEach(l => chunkInto(l, groups, leftover));
+    else if (mode === 'mixed') pairMixed(pool, groups, leftover);
+    else if (mode === 'level') groupBy(pool, p => p.level).forEach(l => chunkInto(l, groups, leftover));
+    else if (mode === 'level-samesex') groupBy(pool, p => p.level + '|' + p.sex).forEach(l => chunkInto(l, groups, leftover));
+    else if (mode === 'level-mixed') groupBy(pool, p => p.level).forEach(l => pairMixed(l, groups, leftover));
+
+    boxes = Array.from({ length: n }, (_, i) => (groups[i] || []).map(p => p.id));
+    groups.slice(n).forEach(g => leftover.push(...g));
+    const waitlist = data.lineup.filter(p => !p.has_spot);
+    bench = [...leftover, ...waitlist].map(p => p.id);
+    selected = null;
+    render();
+  }
+
+  function clearCourts() {
+    bench = [...boxes.flat(), ...bench];
+    boxes = boxes.map(() => []);
+    selected = null;
+    render();
+  }
+
+  // ---------- Tap to swap / move ----------
+  function removeFrom(id, from) {
+    const arr = from === 'bench' ? bench : boxes[from];
+    const i = arr.indexOf(id);
+    if (i !== -1) arr.splice(i, 1);
+  }
+  function placeAt(id, where) { (where === 'bench' ? bench : boxes[where]).push(id); }
+
+  function tapChip(id, from) {
+    if (!state().editable) return;
+    if (!selected) selected = { playerId: id, from };
+    else if (selected.playerId === id) selected = null;
+    else {
+      const a = selected;
+      removeFrom(a.playerId, a.from); removeFrom(id, from);
+      placeAt(a.playerId, from); placeAt(id, a.from);
+      cutIds.delete(a.playerId); cutIds.delete(id);
+      selected = null;
+    }
+    render();
+  }
+
+  function tapContainer(where) {
+    if (!selected || !state().editable) return;
+    if (selected.from !== where) {
+      removeFrom(selected.playerId, selected.from);
+      placeAt(selected.playerId, where);
+      cutIds.delete(selected.playerId);
+    }
+    selected = null;
+    render();
+  }
+
+  // ---------- Rendering ----------
+  function chipHtml(id, from, isBringer) {
+    const p = byId.get(id);
+    const cls = ['chip'];
+    if (selected && selected.playerId === id) cls.push('selected');
+    if (!p.has_spot) cls.push('wait'); else if (cutIds.has(id)) cls.push('cut');
+    const title = isBringer ? ` title="${esc(ballTooltip(id))}"` : '';
+    const tag = !p.has_spot ? `<span class="tag">Waitlist #${p.waitlist_place}</span>` : '';
+    return `<div class="${cls.join(' ')}" data-id="${id}" data-from="${from}"${title}>
+      ${esc(p.first_name)} ${esc(p.last_name)}${isBringer ? '<span class="ball-mark">*</span>' : ''},
+      ${esc(p.sex || '?')}, ${esc(p.level || '?')} ${tag}</div>`;
+  }
+
+  function render() {
+    const s = data.session, st = state(), mode = $('orgPlay').value;
+    $('testBanner').hidden = !data.test_mode;
+    $('testBanner').textContent = `Test mode: the app is pretending it's ${fmtDateTime(data.now)}.`;
+    $('sessionTitle').textContent = `${fmtPlayDate(s.play_date)} · ${s.num_courts} courts`;
+
+    const status = $('lockStatus');
+    if (st.final) {
+      status.className = 'lock-status final';
+      status.textContent = s.locked_at
+        ? `Final. These courts were locked by ${s.locked_by} and became final at ${fmtDateTime(s.courts_publish_at)}.`
+        : `The courts were not locked before ${fmtDateTime(s.courts_publish_at)}.`;
+    } else if (st.locked) {
+      status.className = 'lock-status locked';
+      status.textContent = `Locked by ${s.locked_by} at ${fmtDateTime(s.locked_at)}. You can unlock and change them until ${fmtDateTime(s.courts_publish_at)}, when they become final.`;
+    } else {
+      status.className = 'lock-status open';
+      status.textContent = st.beforeCutoff
+        ? `Sign-ups are open until ${fmtDateTime(s.signups_close_at)}, so the line-up can still change. You can try arrangements now; locking opens at noon Saturday.`
+        : `Not locked yet. Arrange the courts, then lock them before ${fmtDateTime(s.courts_publish_at)}.`;
+    }
+
+    $('orgPlay').disabled = !st.editable;
+    $('autoAssignBtn').disabled = !st.editable;
+    $('clearBtn').disabled = !st.editable;
+    $('lockBtn').hidden = st.locked || st.final;
+    $('lockBtn').disabled = st.beforeCutoff;
+    $('unlockBtn').hidden = !st.locked || st.final;
+    $('content').classList.toggle('locked', !st.editable);
+
+    const grid = $('courtsGrid');
+    grid.innerHTML = '';
+    boxes.forEach((ids, i) => {
+      const ok = boxSpecOk(ids, mode);
+      const bringer = bringerFor(ids);
+      const past = pastDatesForCourt(ids);
+      const court = document.createElement('div');
+      court.className = 'court' + (ok ? ' valid' : '') + (selected ? ' droppable' : '') + (past.length ? ' repeat' : '');
+      if (past.length) { court.dataset.tooltip = `Played together before, on: ${past.join(', ')}`; court.tabIndex = 0; }
+      court.innerHTML = `
+        <div class="court-header">
+          <div class="court-title">Court ${i + 1}</div>
+          <div class="court-badge ${ok ? 'ok' : 'bad'}">${ok ? 'OK' : 'NEEDS FIX'}</div>
+        </div>
+        <div class="court-count">${ids.length} / ${COURT_SIZE} players</div>
+        <div class="player-list">${ids.map(id => chipHtml(id, i, id === bringer)).join('')}</div>`;
+      court.addEventListener('click', () => tapContainer(i));
+      grid.appendChild(court);
+    });
+
+    const order = id => { const p = byId.get(id); return (p.has_spot ? 0 : 1e6) + (cutIds.has(id) ? 1e3 : 0) + p.place; };
+    bench.sort((a, b) => order(a) - order(b));
+    const waiting = bench.filter(id => !byId.get(id).has_spot).length;
+    $('benchCount').textContent = `${bench.length} player(s), ${waiting} from the waitlist`;
+    $('benchList').innerHTML = bench.length ? bench.map(id => chipHtml(id, 'bench', false)).join('')
+      : '<span class="muted">Everyone signed up is on a court.</span>';
+    $('benchPanel').classList.toggle('droppable', !!selected);
+
+    document.querySelectorAll('.chip').forEach(chip => chip.addEventListener('click', e => {
+      e.stopPropagation();
+      const from = chip.dataset.from === 'bench' ? 'bench' : Number(chip.dataset.from);
+      tapChip(Number(chip.dataset.id), from);
+    }));
+
+    const hint = $('moveHint');
+    if (selected) {
+      const p = byId.get(selected.playerId);
+      hint.hidden = false;
+      hint.innerHTML = `<span>${esc(p.first_name)} ${esc(p.last_name)} selected: tap another player to swap, or an empty spot to move them. Tap them again to cancel.</span>
+        <button class="danger" id="removeBtn">Remove from this week</button>`;
+      $('removeBtn').addEventListener('click', removeSelected);
+    } else {
+      hint.hidden = true;
+    }
+  }
+
+  // ---------- Actions ----------
+  async function removeSelected() {
+    const p = byId.get(selected.playerId);
+    if (!confirm(`Remove ${p.first_name} ${p.last_name} from this Sunday? They won't get any email. This is recorded as a developer removal.`)) return;
+    try {
+      await rpc('dev_remove_signup', { p_signup_id: p.signup_id });
+      removeFrom(p.id, selected.from);
+      byId.delete(p.id);
+      data.lineup = data.lineup.filter(x => x.id !== p.id);
+      selected = null;
+      showMessage($('msg'), `${p.first_name} ${p.last_name} was removed from this week.`, 'ok');
+      render();
+    } catch (err) { showMessage($('msg'), err.message); }
+  }
+
+  async function lockCourts() {
+    const mode = $('orgPlay').value;
+    const problems = [];
+    boxes.forEach((ids, i) => {
+      if (ids.length && !boxSpecOk(ids, mode)) problems.push(`Court ${i + 1} ${ids.length !== COURT_SIZE ? `has ${ids.length} players` : "doesn't fit the format"}`);
+    });
+    const empty = boxes.filter(b => !b.length).length;
+    if (empty) problems.push(`${empty} court(s) are empty`);
+    const benchedWithSpot = bench.filter(id => byId.get(id).has_spot).length;
+    const benchedWaitlist = bench.length - benchedWithSpot;
+    if (benchedWithSpot) problems.push(`${benchedWithSpot} player(s) who got a spot are on the bench, not on a court`);
+    const msg = (problems.length ? `Heads up: ${problems.join('; ')}.\n\n` : '') +
+      'Lock these courts?' +
+      (bench.length ? ` The ${bench.length} player(s) on the bench (${benchedWithSpot} with a spot, ${benchedWaitlist} from the waitlist) will get the "no spot this week" email at 8pm.` : '');
+    if (!confirm(msg)) return;
+
+    const courts = boxes.map((ids, i) => {
+      const bringer = pickBallBringer(ids);
+      return { court: i + 1, players: ids.map(id => ({ player_id: id, brings_balls: id === bringer })) };
+    }).filter(c => c.players.length);
+    try {
+      await rpc('dev_lock_courts', { p_org_play: mode, p_courts: courts });
+      showMessage($('msg'), 'Courts locked.', 'ok');
+      await load();
+    } catch (err) { showMessage($('msg'), err.message); }
+  }
+
+  async function unlockCourts() {
+    try {
+      await rpc('dev_unlock_courts');
+      showMessage($('msg'), 'Unlocked. Make your changes, then lock again before 8pm.', 'ok');
+      await load();
+    } catch (err) { showMessage($('msg'), err.message); }
+  }
+
+  $('orgPlay').addEventListener('change', render);
+  $('autoAssignBtn').addEventListener('click', autoAssign);
+  $('clearBtn').addEventListener('click', clearCourts);
+  $('lockBtn').addEventListener('click', lockCourts);
+  $('unlockBtn').addEventListener('click', unlockCourts);
+  $('benchPanel').addEventListener('click', () => tapContainer('bench'));
+
+  start().catch(err => showMessage($('guardMsg'), err.message));
+})();
+</script>
+</body>
+</html>

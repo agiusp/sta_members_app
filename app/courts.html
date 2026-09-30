@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>STA Designated Courts</title>
+<link rel="stylesheet" href="styles.css">
+<style>
+  body { max-width: 1100px; }
+  .courts-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
+    margin: 14px 0 18px;
+  }
+  @media (max-width: 760px) { .courts-grid { grid-template-columns: 1fr; } }
+  .court {
+    border-radius: 10px;
+    border: 2px solid #b0b8c1;
+    background: #f7f8fa;
+    padding: 12px;
+  }
+  .court-title { font-weight: 700; font-size: 15px; margin-bottom: 8px; }
+  .player-list { display: flex; flex-direction: column; gap: 6px; }
+  .chip {
+    background: #fff; border: 1px solid #d5d9de; border-radius: 6px;
+    padding: 8px 10px; font-size: 14px;
+  }
+  .ball-mark { font-weight: 700; color: #b7791f; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Designated Courts</h1>
+  <div class="who">
+    <a href="./">Sign-up page</a>
+  </div>
+</header>
+
+<div class="test-banner" id="testBanner" hidden></div>
+
+<section class="panel">
+  <div id="body"><p class="muted">Loading…</p></div>
+  <div id="msg"></div>
+</section>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/dist/umd/supabase.js"
+        integrity="sha384-Rj26LVGvoeRVR6+mwQmFfcR3QOBEwT+ZmuCWpuiqeTzJpCs0ER4ITAWGb4Hiy3Ok"
+        crossorigin="anonymous"></script>
+<script src="config.js"></script>
+<script src="common.js"></script>
+<script>
+(function () {
+  const { client, esc, rpc, fmtDateTime, fmtPlayDate, showMessage } = STA;
+  const $ = id => document.getElementById(id);
+
+  async function start() {
+    const { data: { session } } = await client.auth.getSession();
+    if (!session) { location.href = './'; return; }
+    let d;
+    try { d = await rpc('my_courts'); }
+    catch (err) {
+      $('body').innerHTML = '';
+      showMessage($('msg'), err.message === 'Not a member'
+        ? 'This email is not on the active member list.' : err.message);
+      return;
+    }
+    $('testBanner').hidden = !d.test_mode;
+    $('testBanner').textContent = `Test mode: the app is pretending it's ${fmtDateTime(d.now)}.`;
+
+    if (!d.session) { $('body').innerHTML = '<p class="muted">No Sunday session is scheduled right now.</p>'; return; }
+    const title = `<h2>${esc(fmtPlayDate(d.session.play_date))}, 9–10:30am</h2>`;
+    if (!d.ready) {
+      $('body').innerHTML = title + (d.not_locked
+        ? '<p>Court assignments are not available this week. Please check your email or contact the organizers.</p>'
+        : `<p>Court assignments will be posted here, and sent by email, at <strong>${esc(fmtDateTime(d.session.courts_publish_at))}</strong>.</p>`);
+      return;
+    }
+    $('body').innerHTML = title + `
+      <div class="courts-grid">${d.courts.map(c => `
+        <div class="court">
+          <div class="court-title">Court ${c.court}</div>
+          <div class="player-list">${c.players.map(p =>
+            `<div class="chip">${esc(p.name)}${p.brings_balls ? '<span class="ball-mark">*</span>' : ''}</div>`).join('')}
+          </div>
+        </div>`).join('')}
+      </div>
+      <p class="muted"><span class="ball-mark">*</span> = bringing a new can of tennis balls for that court</p>
+      ${d.waitlist.length ? `<p><strong>Wait list, in order:</strong> ${d.waitlist.map(esc).join(', ')}</p>
+        <p class="muted">Can't play after all? It's your responsibility to find a replacement from the wait list or your own contacts.</p>` : ''}`;
+  }
+
+  start().catch(err => showMessage($('msg'), err.message));
+})();
+</script>
+</body>
+</html>
