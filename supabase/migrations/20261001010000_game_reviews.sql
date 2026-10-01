@@ -1,5 +1,6 @@
 -- "Review my Game": players who were on a court last Sunday record the sets
--- they played (partner, opponents, games won). Stored for the future
+-- they played (partner, opponents, games won), and rate how much they enjoyed
+-- the game (1 = did not enjoy, 5 = enjoyed it very much) with optional comments. Stored for the future
 -- player-rating-update. Each player reviews separately, so the same set may
 -- be recorded by several players on a court; player-rating-update reconciles.
 --
@@ -11,6 +12,8 @@ create table public.game_reviews (
   session_id   bigint not null references public.sessions (id),
   player_id    bigint not null references public.players (id),
   court        int not null,
+  enjoyment    int not null check (enjoyment between 1 and 5),
+  comments     text check (char_length(comments) <= 1000),
   submitted_by text not null,
   submitted_at timestamptz not null,
   unique (session_id, player_id)
@@ -60,6 +63,8 @@ create function public.review_json(p_review_id bigint) returns jsonb
 language sql stable security definer set search_path = public as $$
   select jsonb_build_object(
     'submitted_at', r.submitted_at,
+    'enjoyment', r.enjoyment,
+    'comments', r.comments,
     'sets', coalesce((
       select jsonb_agg(jsonb_build_object(
                'set_number', s.set_number,
@@ -110,8 +115,11 @@ end;
 $$;
 
 -- p_sets: [{"partner_id": 12 or null for singles, "my_games": 6, "their_games": 3}, ...]
+-- p_enjoyment: 1 (did not enjoy) to 5 (enjoyed it very much). p_comments: optional.
 -- The teams are worked out here from the court, never taken from the page.
-create function public.submit_review(p_player_id bigint, p_sets jsonb) returns jsonb
+create function public.submit_review(p_player_id bigint, p_sets jsonb,
+                                     p_enjoyment int default null, p_comments text default null)
+returns jsonb
 language plpgsql security definer set search_path = public as $$
 declare
   me     text := my_email();
@@ -146,10 +154,17 @@ begin
   if jsonb_typeof(p_sets) <> 'array' or jsonb_array_length(p_sets) not between 1 and 5 then
     raise exception 'Enter between 1 and 5 sets';
   end if;
+  if p_enjoyment is null or p_enjoyment not between 1 and 5 then
+    raise exception 'Please rate how much you enjoyed the game, from 1 to 5';
+  end if;
+  if char_length(p_comments) > 1000 then
+    raise exception 'Comments can be at most 1000 characters';
+  end if;
 
   delete from game_reviews where session_id = sid and player_id = p_player_id;
-  insert into game_reviews (session_id, player_id, court, submitted_by, submitted_at)
-  values (sid, p_player_id, crt, me, app_now()) returning id into rid;
+  insert into game_reviews (session_id, player_id, court, enjoyment, comments, submitted_by, submitted_at)
+  values (sid, p_player_id, crt, p_enjoyment, nullif(trim(p_comments), ''), me, app_now())
+  returning id into rid;
 
   for st in select * from jsonb_array_elements(p_sets) loop
     n := n + 1;
@@ -176,5 +191,5 @@ $$;
 
 revoke all on function public.review_session_id(), public.review_window_closes(date),
   public.player_name(bigint), public.review_json(bigint) from anon, authenticated, public;
-revoke all on function public.my_review(), public.submit_review(bigint, jsonb) from anon, public;
-grant execute on function public.my_review(), public.submit_review(bigint, jsonb) to authenticated;
+revoke all on function public.my_review(), public.submit_review(bigint, jsonb, int, text) from anon, public;
+grant execute on function public.my_review(), public.submit_review(bigint, jsonb, int, text) to authenticated;

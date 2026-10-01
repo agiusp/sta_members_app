@@ -67,14 +67,14 @@ await check('after play ends, a player who was on a court sees their courtmates'
 await check('a member who did not play is told so and cannot submit a review', async () => {
   const r = await rpcOk(m.carol, 'my_review');
   assert.equal(r.players[0].played, false);
-  await rpcFails(m.carol, 'submit_review', { p_player_id: r.players[0].id, p_sets: [{ partner_id: null, my_games: 6, their_games: 0 }] },
+  await rpcFails(m.carol, 'submit_review', { p_enjoyment: 4, p_player_id: r.players[0].id, p_sets: [{ partner_id: null, my_games: 6, their_games: 0 }] },
     /did not play/);
 });
 
 console.log('Submitting');
 const alice = id('Alice');
 await check('a doubles review: partner chosen per set; opponents worked out; scores stored as player set 1 vs 2', async () => {
-  const r = await rpcOk(m.alice, 'submit_review', { p_player_id: alice, p_sets: [
+  const r = await rpcOk(m.alice, 'submit_review', { p_enjoyment: 4, p_player_id: alice, p_sets: [
     { partner_id: others[0], my_games: 6, their_games: 3 },
     { partner_id: others[1], my_games: 4, their_games: 4 }
   ] });
@@ -90,26 +90,43 @@ await check('a doubles review: partner chosen per set; opponents worked out; sco
 });
 
 await check('bad reviews are refused and leave the saved review unchanged', async () => {
-  await rpcFails(m.alice, 'submit_review', { p_player_id: alice, p_sets: [{ partner_id: id('Zack'), my_games: 6, their_games: 2 }] },
+  await rpcFails(m.alice, 'submit_review', { p_enjoyment: 4, p_player_id: alice, p_sets: [{ partner_id: id('Zack'), my_games: 6, their_games: 2 }] },
     /choose your partner from the players on your court/);
-  await rpcFails(m.alice, 'submit_review', { p_player_id: alice, p_sets: [{ partner_id: others[0], my_games: 8, their_games: 2 }] },
+  await rpcFails(m.alice, 'submit_review', { p_enjoyment: 4, p_player_id: alice, p_sets: [{ partner_id: others[0], my_games: 8, their_games: 2 }] },
     /from 0 to 7/);
-  await rpcFails(m.alice, 'submit_review', { p_player_id: alice, p_sets: [] }, /between 1 and 5/);
-  await rpcFails(m.alice, 'submit_review', { p_player_id: alice,
+  await rpcFails(m.alice, 'submit_review', { p_enjoyment: 4, p_player_id: alice, p_sets: [] }, /between 1 and 5/);
+  await rpcFails(m.alice, 'submit_review', { p_enjoyment: 4, p_player_id: alice,
     p_sets: Array(6).fill({ partner_id: others[0], my_games: 1, their_games: 1 }) }, /between 1 and 5/);
-  await rpcFails(m.alice, 'submit_review', { p_player_id: id('Zack'), p_sets: [{ partner_id: null, my_games: 6, their_games: 2 }] },
+  await rpcFails(m.alice, 'submit_review', { p_enjoyment: 4, p_player_id: id('Zack'), p_sets: [{ partner_id: null, my_games: 6, their_games: 2 }] },
     /not linked to your account/);
   assert.equal((await rpcOk(m.alice, 'my_review')).players[0].review.sets.length, 2);
 });
 
+await check('a rating from 1 to 5 is required; comments are optional, up to 1000 characters', async () => {
+  const set = [{ partner_id: others[0], my_games: 6, their_games: 3 }];
+  await rpcFails(m.alice, 'submit_review', { p_player_id: alice, p_sets: set }, /rate how much you enjoyed/);
+  await rpcFails(m.alice, 'submit_review', { p_player_id: alice, p_sets: set, p_enjoyment: 6 }, /from 1 to 5/);
+  await rpcFails(m.alice, 'submit_review', { p_player_id: alice, p_sets: set, p_enjoyment: 0 }, /from 1 to 5/);
+  await rpcFails(m.alice, 'submit_review', { p_player_id: alice, p_sets: set, p_enjoyment: 3, p_comments: 'x'.repeat(1001) },
+    /at most 1000 characters/);
+  const r = await rpcOk(m.alice, 'submit_review', { p_player_id: alice, p_sets: set, p_enjoyment: 5,
+    p_comments: '  Great rallies, but court 1 needed squeegeeing.  ' });
+  assert.equal(r.players[0].review.enjoyment, 5);
+  assert.equal(r.players[0].review.comments, 'Great rallies, but court 1 needed squeegeeing.');
+  const blank = await rpcOk(m.alice, 'submit_review', { p_player_id: alice, p_sets: set, p_enjoyment: 2, p_comments: '   ' });
+  assert.equal(blank.players[0].review.comments, null, 'blank comments are stored as none');
+  const row = await call(`/rest/v1/game_reviews?select=enjoyment,comments&player_id=eq.${alice}&session_id=eq.${s.id}`, { token: dev, method: 'GET' });
+  assert.deepEqual(row.data, [{ enjoyment: 2, comments: null }], 'developers can see ratings');
+});
+
 await check('submitting again replaces the earlier review', async () => {
-  const r = await rpcOk(m.alice, 'submit_review', { p_player_id: alice, p_sets: [{ partner_id: others[2], my_games: 2, their_games: 6 }] });
+  const r = await rpcOk(m.alice, 'submit_review', { p_enjoyment: 4, p_player_id: alice, p_sets: [{ partner_id: others[2], my_games: 2, their_games: 6 }] });
   assert.equal(r.players[0].review.sets.length, 1);
   assert.deepEqual([r.players[0].review.sets[0].team1_games, r.players[0].review.sets[0].team2_games], [2, 6]);
 });
 
 await check('singles: the player is automatically player set 1 and the opponent player set 2', async () => {
-  const r = await rpcOk(m.yara, 'submit_review', { p_player_id: id('Yara'), p_sets: [
+  const r = await rpcOk(m.yara, 'submit_review', { p_enjoyment: 4, p_player_id: id('Yara'), p_sets: [
     { partner_id: null, my_games: 6, their_games: 4 }, { partner_id: null, my_games: 3, their_games: 6 }] });
   const yara = r.players.find(p => p.name === 'Yara Green');
   assert.deepEqual(yara.courtmates.map(c => c.name), ['Zack Baker']);
@@ -118,7 +135,7 @@ await check('singles: the player is automatically player set 1 and the opponent 
 });
 
 await check('a family account reviews separately for each linked player who played', async () => {
-  const r = await rpcOk(m.yara, 'submit_review', { p_player_id: id('Zack'), p_sets: [{ partner_id: null, my_games: 4, their_games: 6 }] });
+  const r = await rpcOk(m.yara, 'submit_review', { p_enjoyment: 4, p_player_id: id('Zack'), p_sets: [{ partner_id: null, my_games: 4, their_games: 6 }] });
   const zack = r.players.find(p => p.name === 'Zack Baker');
   assert.deepEqual(zack.review.sets[0].team1, ['Zack Baker']);
   assert.deepEqual(zack.review.sets[0].team2, ['Yara Green']);
@@ -156,7 +173,7 @@ await check('reviews close the next Sunday at 9am', async () => {
   await setClock(at(sunday(9), 7 * 24 * hour));
   const r = await rpcOk(m.alice, 'my_review');
   assert.equal(r.open, false);
-  await rpcFails(m.alice, 'submit_review', { p_player_id: alice, p_sets: [{ partner_id: others[0], my_games: 6, their_games: 1 }] },
+  await rpcFails(m.alice, 'submit_review', { p_enjoyment: 4, p_player_id: alice, p_sets: [{ partner_id: others[0], my_games: 6, their_games: 1 }] },
     /closed/);
 });
 

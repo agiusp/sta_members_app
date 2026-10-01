@@ -297,29 +297,36 @@
     leftover.push(...m, ...f);
   }
 
+  // Everyone with a spot (sign-up places 1 to 4 x courts) gets a court:
+  // first in courts of 4 that fit the Organized Play format, then anyone who
+  // didn't fit fills the remaining courts in sign-up order (those courts show
+  // as NEEDS FIX). Only the waitlist stays on the bench.
   function autoAssign() {
     const mode = $('orgPlay').value;
     const n = data.session.num_courts;
     const withSpot = data.lineup.filter(p => p.has_spot);          // already in sign-up order
-    const usable = withSpot.length - (withSpot.length % COURT_SIZE); // latest sign-ups left off first
-    const pool = withSpot.slice(0, usable);
-    const leftover = withSpot.slice(usable);
-    cutIds = new Set(leftover.map(p => p.id));
-    const groups = [];
+    const groups = [], misfits = [];
 
-    if (mode === 'same-sex') groupBy(pool, p => p.sex).forEach(l => chunkInto(l, groups, leftover));
-    else if (mode === 'mixed') pairMixed(pool, groups, leftover);
-    else if (mode === 'level') groupBy(pool, p => p.level).forEach(l => chunkInto(l, groups, leftover));
-    else if (mode === 'level-samesex') groupBy(pool, p => p.level + '|' + p.sex).forEach(l => chunkInto(l, groups, leftover));
-    else if (mode === 'level-mixed') groupBy(pool, p => p.level).forEach(l => pairMixed(l, groups, leftover));
+    if (mode === 'same-sex') groupBy(withSpot, p => p.sex).forEach(l => chunkInto(l, groups, misfits));
+    else if (mode === 'mixed') pairMixed(withSpot, groups, misfits);
+    else if (mode === 'level') groupBy(withSpot, p => p.level).forEach(l => chunkInto(l, groups, misfits));
+    else if (mode === 'level-samesex') groupBy(withSpot, p => p.level + '|' + p.sex).forEach(l => chunkInto(l, groups, misfits));
+    else if (mode === 'level-mixed') groupBy(withSpot, p => p.level).forEach(l => pairMixed(l, groups, misfits));
 
-    boxes = Array.from({ length: n }, (_, i) => (groups[i] || []).map(p => p.id));
-    groups.slice(n).forEach(g => leftover.push(...g));
-    const waitlist = data.lineup.filter(p => !p.has_spot);
-    bench = [...leftover, ...waitlist].map(p => p.id);
+    groups.slice(n).forEach(g => misfits.push(...g));
+    const fitting = groups.slice(0, n);
+    misfits.sort((a, b) => a.place - b.place);
+    const courts = fitting.map(g => g.map(p => p.id));
+    for (let i = 0; i < misfits.length; i += COURT_SIZE) {
+      courts.push(misfits.slice(i, i + COURT_SIZE).map(p => p.id));
+    }
+    boxes = Array.from({ length: n }, (_, i) => courts[i] || []);
+    bench = data.lineup.filter(p => !p.has_spot).map(p => p.id);
+    cutIds = new Set();
     selected = null;
     render();
   }
+
 
   function clearCourts() {
     bench = [...boxes.flat(), ...bench];

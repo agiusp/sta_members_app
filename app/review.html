@@ -14,6 +14,19 @@
   .result-table td, .result-table th { font-size: 14px; }
   .result-list { margin: 10px 0 0; padding-left: 20px; font-size: 14px; }
   .result-list li { margin-bottom: 4px; }
+  .rating { border: none; padding: 0; margin: 14px 0 0; }
+  .rating legend { font-weight: 700; margin-bottom: 8px; }
+  .rating-options { display: flex; flex-wrap: wrap; gap: 8px; }
+  .rating-options label {
+    flex-direction: row; align-items: center; gap: 6px; font-size: 14px; color: var(--ink);
+    font-weight: 400; border: 1px solid #d5d9de; border-radius: 6px; padding: 8px 10px; cursor: pointer;
+  }
+  .comments textarea {
+    width: 100%; min-height: 90px; font: inherit; font-size: 14px; padding: 8px 9px;
+    border: 1px solid #cbd2d9; border-radius: 6px; color: var(--ink);
+  }
+  .my-rating { margin-top: 12px; font-size: 14px; }
+  .my-comments { white-space: pre-wrap; background: #f7f8fa; border: 1px solid #e2e5e9; border-radius: 6px; padding: 10px; margin-top: 6px; font-size: 14px; }
 </style>
 </head>
 <body>
@@ -67,6 +80,7 @@
   }
 
   const player = () => data.players.find(p => p.id === playerId);
+  const ENJOYMENT = { 1: 'Did not enjoy', 2: 'Enjoyed it a little', 3: 'It was OK', 4: 'Enjoyed it', 5: 'Enjoyed it very much' };
   const teamName = names => names.join(' & ');
 
   function render() {
@@ -90,7 +104,7 @@
     html += `<p>${esc(p.name)} played on <strong>Court ${p.court}</strong> with ${esc(p.courtmates.map(m => m.name).join(', '))}${singles ? ' (singles)' : ''}.</p>`;
 
     if (p.review && !editing) {
-      html += resultHtml(p.review.sets) +
+      html += resultHtml(p.review) +
         `<p class="muted">Submitted ${esc(fmtDateTime(p.review.submitted_at))}.</p>` +
         (data.open ? '<div class="row"><button class="secondary" id="editBtn">Edit my review</button></div>' : '') +
         closesNote();
@@ -116,7 +130,15 @@
           <select id="setCount">${[1, 2, 3, 4, 5].map(n => `<option ${n === count ? 'selected' : ''}>${n}</option>`).join('')}</select></label>
       </div>
       <div id="sets">${setRows(p, singles, count, prev)}</div>
-      <div class="row" style="margin-top:8px"><button id="submitBtn">Submit my review</button>
+      <fieldset class="rating">
+        <legend>Rate my game: how much did you enjoy it?</legend>
+        <div class="rating-options">${[1, 2, 3, 4, 5].map(n => `<label>
+          <input type="radio" name="enjoyment" value="${n}" ${p.review && p.review.enjoyment === n ? 'checked' : ''}> ${n}: ${ENJOYMENT[n]}</label>`).join('')}
+        </div>
+      </fieldset>
+      <label class="comments" style="margin-top:14px">Comments (optional)
+        <textarea id="comments" maxlength="1000" placeholder="Anything you'd like to tell the organizers about the game">${esc(p.review?.comments || '')}</textarea></label>
+      <div class="row" style="margin-top:12px"><button id="submitBtn">Submit my review</button>
         ${p.review ? '<button class="secondary" id="cancelEditBtn">Cancel</button>' : ''}</div>`;
   }
 
@@ -179,8 +201,11 @@
       if (!ok(mine) || !ok(theirs)) { showMessage($('msg'), `Set ${n}: enter the games won by each side, from 0 to 7.`); return; }
       sets.push({ partner_id: partner, my_games: Number(mine), their_games: Number(theirs) });
     }
+    const rating = document.querySelector('input[name="enjoyment"]:checked');
+    if (!rating) { showMessage($('msg'), 'Please rate how much you enjoyed the game, from 1 to 5.'); return; }
     try {
-      data = await rpc('submit_review', { p_player_id: p.id, p_sets: sets });
+      data = await rpc('submit_review', { p_player_id: p.id, p_sets: sets,
+        p_enjoyment: Number(rating.value), p_comments: $('comments').value });
       editing = false;
       render();
       showMessage($('msg'), 'Thank you! Your review was saved.', 'ok');
@@ -188,7 +213,8 @@
   }
 
   // ---------- The result table ----------
-  function resultHtml(sets) {
+  function resultHtml(review) {
+    const sets = review.sets;
     const rows = sets.map(s => `<tr><td>${esc(teamName(s.team1))}</td><td>${esc(teamName(s.team2))}</td>
       <td>${s.team1_games}-${s.team2_games}</td></tr>`).join('');
     const lines = sets.map(s => {
@@ -200,7 +226,9 @@
     return `<div class="table-wrap"><table class="result-table">
         <tr><th>Player set 1</th><th>Player set 2</th><th>Set score</th></tr>${rows}
       </table></div>
-      <ul class="result-list">${lines.map(l => `<li>${l}</li>`).join('')}</ul>`;
+      <ul class="result-list">${lines.map(l => `<li>${l}</li>`).join('')}</ul>
+      <div class="my-rating"><strong>How much you enjoyed it:</strong> ${review.enjoyment} (${esc(ENJOYMENT[review.enjoyment])})</div>
+      ${review.comments ? `<div class="my-rating"><strong>Your comments:</strong><div class="my-comments">${esc(review.comments)}</div></div>` : ''}`;
   }
 
   start().catch(err => showMessage($('msg'), err.message));
