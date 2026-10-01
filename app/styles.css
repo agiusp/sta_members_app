@@ -56,6 +56,16 @@ input, select {
   color: var(--ink);
 }
 label.check { flex-direction: row; align-items: center; gap: 6px; }
+/* Password box with a show/hide eye button inside it. */
+.pw-wrap { position: relative; display: flex; }
+.pw-wrap input { flex: 1; padding-right: 42px; }
+.pw-toggle {
+  position: absolute; right: 2px; top: 50%; transform: translateY(-50%);
+  min-height: 0; padding: 6px 8px; border: none; background: transparent;
+  color: var(--muted); display: flex; align-items: center;
+}
+.pw-toggle:hover:not(:disabled) { color: var(--ink); filter: none; }
+.pw-toggle:focus-visible { outline: 2px solid var(--accent); border-radius: 4px; }
 button {
   font-size: 14px;
   padding: 8px 14px;
