@@ -13,6 +13,7 @@
   <div class="who">
     <span id="whoEmail"></span>
     <a href="scheduler.html">Scheduler</a>
+    <a href="emails.html">Emails and schedule</a>
     <a href="./">Member page</a>
     <button class="secondary" id="signOutBtn">Sign out</button>
   </div>
@@ -39,7 +40,7 @@
     </div>
     <div class="row" style="margin-top:14px">
       <button class="secondary" id="runTasksBtn">Run timed tasks now</button>
-      <span class="muted">Online, these run automatically every few minutes: the 5pm lock reminder and the 8pm court and no-spot emails. Emails land in the test inbox.</span>
+      <span class="muted">Online, these run automatically every few minutes: the Monday play-invite, "off the waitlist" emails, the Saturday developer emails and the player emails, at the times set in Emails and schedule. Emails land in the test inbox.</span>
     </div>
     <p class="muted">Simulated players sign up one minute apart, ending at the test clock's time. Sign-ups must be open on the test clock.</p>
     <div id="clockMsg"></div>
@@ -110,6 +111,7 @@
         </select></label>
       <span class="muted" id="memberCounts"></span>
     </div>
+    <p class="muted" id="developerList"></p>
     <div id="membersMsg"></div>
     <div class="table-wrap" id="members" style="margin-top:12px"></div>
   </section>
@@ -153,14 +155,20 @@
     const s = week.session;
     if (s) {
       const minute = 60000;
+      const t = await rpc('dev_week_times');
+      const when = k => new Date(t[k]);
+      const label = (prefix, k) => `${prefix} ${when(k).toLocaleString('en-US', { timeZone: STA.TZ, weekday: 'short', hour: 'numeric', minute: '2-digit' })}`;
       const presets = [
-        ['Before sign-ups open', new Date(new Date(s.signups_open_at) - minute)],
-        ['Mon 9:00am (open)', new Date(s.signups_open_at)],
-        ['Sat 11:59am', new Date(new Date(s.signups_close_at) - minute)],
-        ['Sat 12:00pm (closed)', new Date(s.signups_close_at)],
-        ['Sat 3:00pm', new Date(new Date(s.signups_close_at).getTime() + 180 * minute)],
-        ['Sat 5:00pm', new Date(new Date(s.signups_close_at).getTime() + 300 * minute)],
-        ['Sat 8:00pm (final)', new Date(s.courts_publish_at)]
+        ['Before sign-ups open', new Date(when('signups_open') - minute)],
+        [label('Sign-ups open:', 'signups_open'), when('signups_open')],
+        ['1 min before sign-ups close', new Date(when('signups_close') - minute)],
+        [label('Closed:', 'signups_close'), when('signups_close')],
+        [label('Scheduler email:', 'dev_scheduler_open'), when('dev_scheduler_open')],
+        [label('First reminder:', 'dev_reminder_1'), when('dev_reminder_1')],
+        [label('Final reminder:', 'dev_reminder_2'), when('dev_reminder_2')],
+        [label('Locked summary:', 'dev_locked_summary'), when('dev_locked_summary')],
+        [label('Player emails:', 'courts_publish'), when('courts_publish')],
+        [label('Late-lock cutoff:', 'late_lock_until'), when('late_lock_until')]
       ];
       $('clockPresets').innerHTML = presets.map(([label, d]) =>
         `<button class="secondary" data-clock="${d.toISOString()}">${esc(label)}</button>`).join('');
@@ -173,7 +181,7 @@
     }
     const spots = week.lineup.filter(l => l.has_spot).length;
     $('weekInfo').innerHTML = `<h2>${esc(fmtPlayDate(s.play_date))}</h2>
-      <p>${s.locked_at ? `<strong>Courts locked</strong> by ${esc(s.locked_by)}.` : 'Courts not locked yet.'}
+      <p>${s.locked_at ? `<strong>${s.week_mode === 'rain_expected' ? 'Rain-out expected (no courts)' : s.week_mode === 'self_organized' ? 'Self-organized play (no courts)' : 'Courts locked'}</strong> by ${esc(s.locked_by)}.` : 'Courts not locked yet.'}
         ${s.published_at ? `Emails sent ${esc(fmtDateTime(s.published_at))}.` : ''}
         <a href="scheduler.html">Open the Scheduler</a></p>
       <p class="muted">Sign-ups ${esc(fmtDateTime(s.signups_open_at))} to ${esc(fmtDateTime(s.signups_close_at))}
@@ -228,7 +236,17 @@
       try { msg = (await error.context.json()).error || msg; } catch (_) { /* keep generic message */ }
       showMessage($('clockMsg'), msg);
     } else {
-      const what = { lock_reminder: '5pm lock reminder', publish: '8pm court and no-spot emails', not_locked_alert: '8pm "not locked" alert' };
+      const what = {
+        play_invite: 'Monday play-invite',
+        moved_off_waitlist: '"off the waitlist" email',
+        dev_scheduler_open: '"time to run the Scheduler" email',
+        dev_reminder_1: 'first reminder (courts not locked)',
+        dev_reminder_2: 'final reminder (courts not locked)',
+        preview: 'locked summary to developers',
+        publish: 'court and no-spot emails to players',
+        weather: 'weather email to everyone signed up',
+        not_locked_alert: '8pm "not locked yet" alert'
+      };
       showMessage($('clockMsg'), data.tasks.length
         ? `Ran: ${data.tasks.map(t => what[t] || t).join(', ')}. Sent ${data.sent} email(s)` +
           (data.failed.length ? `; ${data.failed.length} failed: ${data.failed.join('; ')}` : '.')
@@ -297,6 +315,9 @@
     $('inviteAllHint').textContent = notInvited.length
       ? `${notInvited.length} current member(s) not invited yet. Invites that weren't accepted are resent one at a time below.`
       : 'Every current member has been invited.';
+    const devs = memberRows.filter(a => a.is_developer && a.active);
+    $('developerList').textContent = 'Developers (get the Saturday reminder emails): ' + devs.map(a =>
+      (a.players[0] ? `${a.players[0].first_name} ${a.players[0].last_name}` : a.email) + ` <${a.email}>`).join(', ');
     $('memberCounts').textContent =
       `${memberRows.length} members: ${memberRows.filter(needsInvite).length} current without an account, ` +
       `${memberRows.filter(a => a.signin_status === 'active').length} with an account, ` +
@@ -315,7 +336,8 @@
     $('members').innerHTML = rows.length ? `<table>
       <tr><th>Email</th><th>Players</th><th>Membership</th><th>Account</th><th></th></tr>
       ${rows.map(a => `<tr>
-        <td>${esc(a.email)}${a.is_developer ? ' <span class="badge none">developer</span>' : ''}${a.active ? '' : ' <span class="badge wait">removed</span>'}</td>
+        <td>${esc(a.email)}${a.is_developer ? ' <span class="badge none">developer</span>' : ''}${a.active ? '' : ' <span class="badge wait">removed</span>'}
+          ${a.active ? `<br><a class="link-button" data-developer="${esc(a.email)}" data-is-dev="${a.is_developer}">${a.is_developer ? 'Remove as developer' : 'Make developer'}</a>` : ''}</td>
         <td>${a.players.map(p => `${esc(p.first_name)} ${esc(p.last_name)} <span class="muted">(${esc(p.level || '?')}, ${esc(p.sex || '?')})</span>`).join('<br>')}</td>
         <td>${a.membership_current ? 'Current' : '<span class="badge wait">Lapsed</span>'}
           <a class="link-button" data-membership="${esc(a.email)}" data-current="${a.membership_current}">${a.membership_current ? 'Mark lapsed' : 'Mark current'}</a></td>
@@ -370,6 +392,17 @@
   }
 
   $('members').addEventListener('click', async e => {
+    const dv = e.target.closest('[data-developer]');
+    if (dv) {
+      const makeDev = dv.dataset.isDev !== 'true';
+      if (!makeDev && !confirm(`Remove ${dv.dataset.developer} as a developer? They'll lose access to the Developer area and Scheduler.`)) return;
+      const { error } = await client.from('accounts')
+        .update({ is_developer: makeDev }).eq('email', dv.dataset.developer);
+      showMessage($('membersMsg'), error ? error.message
+        : `${dv.dataset.developer} is ${makeDev ? 'now a developer' : 'no longer a developer'}.`, error ? 'error' : 'ok');
+      await loadMembers();
+      return;
+    }
     const m = e.target.closest('[data-membership]');
     if (m) {
       const makeCurrent = m.dataset.current !== 'true';

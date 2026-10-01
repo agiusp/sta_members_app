@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>STA Emails and Schedule</title>
+<link rel="stylesheet" href="styles.css">
+<style>
+  body { max-width: 980px; }
+  .sched td, .sched th { vertical-align: middle; }
+  .sched select, .sched input[type="time"] { padding: 5px 6px; font-size: 13px; }
+  .email-card { border-top: 1px solid #e2e5e9; padding: 16px 0; }
+  .email-card:first-of-type { border-top: none; padding-top: 0; }
+  .email-card h3 { margin: 0 0 4px; font-size: 16px; }
+  .meta { font-size: 13px; color: var(--muted); margin-bottom: 8px; }
+  .meta strong { color: var(--ink); font-weight: 600; }
+  .email-card input.subject { width: 100%; }
+  .email-card textarea {
+    width: 100%; min-height: 220px; font: 13px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace;
+    padding: 9px; border: 1px solid #cbd2d9; border-radius: 6px; color: var(--ink);
+  }
+  .placeholders { font-size: 12px; color: var(--muted); margin: 6px 0 10px; }
+  .placeholders code { color: var(--ink); background: #f0f1f3; padding: 1px 4px; border-radius: 4px; }
+  .preview {
+    white-space: pre-wrap; font-size: 13px; background: #f7f8fa; border: 1px solid #e2e5e9;
+    border-radius: 6px; padding: 12px; margin-top: 10px;
+  }
+  .preview .subj { font-weight: 700; margin-bottom: 8px; }
+  #docView .doc-email { page-break-inside: avoid; margin-bottom: 28px; }
+  #docView .doc-email h3 { margin-bottom: 4px; }
+  @media print {
+    header, .no-print { display: none !important; }
+    body { background: #fff; padding: 0; }
+    .panel { border: none; padding: 0; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Emails and schedule</h1>
+  <div class="who">
+    <a href="developer.html">Developer area</a>
+    <a href="scheduler.html">Scheduler</a>
+  </div>
+</header>
+
+<div id="guardMsg"></div>
+
+<div id="editView" hidden>
+  <section class="panel">
+    <div class="panel-title">Weekly schedule (US Eastern)</div>
+    <p class="muted">When each deadline and timed email happens. The conditions are fixed; days, times and on/off switches can be changed.
+      Changes apply from next week, or from this week if its sign-ups haven't opened yet.
+      If you move a deadline, also update any email wording below that mentions it (for example "noon on Saturday").</p>
+    <div class="table-wrap"><table class="sched" id="schedTable"></table></div>
+    <div class="row" style="margin-top:10px"><button id="saveSchedBtn">Save schedule</button></div>
+    <div id="schedMsg"></div>
+  </section>
+
+  <section class="panel">
+    <div class="row" style="justify-content:space-between">
+      <div class="panel-title" style="margin:0">Email wording</div>
+      <button class="secondary" id="docBtn">View all emails as one document</button>
+    </div>
+    <p class="muted">Words in {{double braces}} are filled in when the email is sent; each email lists the ones it can use.
+      Your edits are used from the next email onwards. <em>Reset to default</em> brings back the original wording.</p>
+    <div id="emailList"></div>
+  </section>
+</div>
+
+<div id="docView" hidden>
+  <section class="panel">
+    <div class="row no-print" style="margin-bottom:14px">
+      <button class="secondary" id="backBtn">Back to editing</button>
+      <button id="printBtn">Print or save as PDF</button>
+    </div>
+    <h2>STA Sunday Program: emails the app sends</h2>
+    <p class="muted" id="docStamp"></p>
+    <div id="docBody"></div>
+  </section>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/dist/umd/supabase.js"
+        integrity="sha384-Rj26LVGvoeRVR6+mwQmFfcR3QOBEwT+ZmuCWpuiqeTzJpCs0ER4ITAWGb4Hiy3Ok"
+        crossorigin="anonymous"></script>
+<script src="config.js"></script>
+<script src="common.js"></script>
+<script>
+(function () {
+  const { client, esc, rpc, fmtDateTime, showMessage } = STA;
+  const $ = id => document.getElementById(id);
+  let emails = [], schedule = [], myEmail = '', contacts = '';
+
+  // Same rule as the server: fill {{name}}, leave unknown names visible.
+  const fill = (text, values) => text.replace(/\{\{\s*(\w+)\s*\}\}/g, (m, n) => (n in values ? values[n] : m));
+  const used = text => [...new Set([...text.matchAll(/\{\{\s*(\w+)\s*\}\}/g)].map(m => m[1]))];
+
+  const DAYS = [['6', 'Monday'], ['5', 'Tuesday'], ['4', 'Wednesday'], ['3', 'Thursday'], ['2', 'Friday'], ['1', 'Saturday'], ['0', 'Sunday']];
+  // Weekly order, what each entry is, and its fixed condition.
+  const SCHED = [
+    { key: 'signups_open', what: 'Sign-ups open', cond: 'Every week' },
+    { key: 'play_invite', what: 'Play-invite email', cond: 'Sent when sign-ups open, to current members who have set up their account', switchOnly: true },
+    { key: 'moved_off_waitlist', what: '"Off the waitlist" email', cond: 'When someone cancels (or a court is added) while sign-ups are open and a waitlisted player gets a spot', switchOnly: true },
+    { key: 'signups_close', what: 'Sign-ups close (cancellations too)', cond: 'Every week' },
+    { key: 'dev_scheduler_open', what: 'Developers: time to run the Scheduler', cond: 'Every week', canSwitch: true },
+    { key: 'dev_reminder_1', what: 'Developers: first reminder', cond: 'Only if nothing is locked yet', canSwitch: true },
+    { key: 'dev_reminder_2', what: 'Developers: final reminder', cond: 'Only if still nothing is locked', canSwitch: true },
+    { key: 'dev_locked_summary', what: 'Developers: locked summary', cond: 'Only if locked; sent again if re-locked later', canSwitch: true },
+    { key: 'courts_publish', what: 'Player emails and Designated Courts page', cond: 'Court and no-spot emails, or the weather email; if nothing is locked, developers are alerted instead' },
+    { key: 'late_lock_until', what: 'Late-lock cutoff', cond: 'Last moment a developer can lock a week nobody locked on time; the emails then go out at once' }
+  ];
+
+  async function start() {
+    const { data: { session } } = await client.auth.getSession();
+    if (!session) { location.href = './'; return; }
+    myEmail = session.user.email;
+    if (!(await rpc('is_developer'))) { showMessage($('guardMsg'), 'This area is for developers only.'); return; }
+    await load();
+    $('editView').hidden = false;
+  }
+
+  async function load() {
+    const { data, error } = await client.functions.invoke('email-admin', { body: {} });
+    if (error) { showMessage($('guardMsg'), 'Could not load the emails: ' + error.message); return; }
+    emails = data.emails;
+    schedule = data.schedule;
+    contacts = data.contacts;
+    renderSchedule();
+    renderEmails();
+  }
+
+  // ---------- Schedule ----------
+  function renderSchedule() {
+    const byKey = Object.fromEntries(schedule.map(r => [r.key, r]));
+    $('schedTable').innerHTML = `<tr><th>What</th><th>Day</th><th>Time</th><th>On</th><th>Condition</th></tr>` +
+      SCHED.map(d => {
+        const r = byKey[d.key];
+        const time = (r.at_time || '').slice(0, 5);
+        const dayCell = d.switchOnly ? '<span class="muted">see condition</span>' :
+          `<select data-key="${d.key}" data-field="day">${DAYS.map(([v, n]) =>
+            `<option value="${v}" ${String(r.days_before_sunday) === v ? 'selected' : ''}>${n}</option>`).join('')}</select>`;
+        const timeCell = d.switchOnly ? '' : `<input type="time" data-key="${d.key}" data-field="time" value="${time}">`;
+        const onCell = (d.switchOnly || d.canSwitch)
+          ? `<input type="checkbox" data-key="${d.key}" data-field="enabled" ${r.enabled ? 'checked' : ''}>`
+          : '<span class="muted">always</span>';
+        return `<tr><td>${esc(d.what)}</td><td>${dayCell}</td><td>${timeCell}</td><td>${onCell}</td><td class="muted">${esc(d.cond)}</td></tr>`;
+      }).join('');
+  }
+
+  $('saveSchedBtn').addEventListener('click', async () => {
+    const rows = {};
+    $('schedTable').querySelectorAll('[data-key]').forEach(el => {
+      const r = rows[el.dataset.key] ||= { key: el.dataset.key };
+      if (el.dataset.field === 'day') r.days_before_sunday = Number(el.value);
+      if (el.dataset.field === 'time') r.at_time = el.value;
+      if (el.dataset.field === 'enabled') r.enabled = el.checked;
+    });
+    try {
+      const msg = await rpc('dev_save_schedule', { p_rows: Object.values(rows) });
+      showMessage($('schedMsg'), msg + '.', 'ok');
+      await load();
+    } catch (err) { showMessage($('schedMsg'), err.message); }
+  });
+
+  // ---------- Emails ----------
+  const current = e => e.edited ? { subject: e.edited.subject, body: e.edited.body } : { subject: e.subject, body: e.body };
+
+  function renderEmails() {
+    $('emailList').innerHTML = emails.map(e => {
+      const c = current(e);
+      return `<div class="email-card" data-key="${e.key}">
+        <h3>${esc(e.name)} ${e.edited ? '<span class="badge wait">Edited</span>' : '<span class="badge none">Default wording</span>'}</h3>
+        <div class="meta"><strong>Sent:</strong> ${esc(e.sent)}<br><strong>To:</strong> ${esc(e.to)}
+          ${e.edited ? `<br>Last edited ${esc(fmtDateTime(e.edited.updated_at))}${e.edited.updated_by ? ' by ' + esc(e.edited.updated_by) : ''}` : ''}</div>
+        <label>Subject <input class="subject" value="${esc(c.subject)}"></label>
+        <label style="margin-top:8px">Text <textarea>${esc(c.body)}</textarea></label>
+        <div class="placeholders">Can use: ${Object.entries(e.placeholders).map(([n, what]) =>
+          `<code>{{${esc(n)}}}</code> ${esc(what)}`).join(' · ')}</div>
+        <div class="row">
+          <button class="secondary" data-act="preview">Preview</button>
+          <button data-act="save">Save</button>
+          ${e.edited ? '<button class="danger" data-act="reset">Reset to default</button>' : ''}
+        </div>
+        <div class="msg-slot"></div>
+        <div class="preview" hidden></div>
+      </div>`;
+    }).join('');
+  }
+
+  // Problems worth pointing out before saving.
+  function checkTemplate(e, subject, body) {
+    const allowed = Object.keys(e.placeholders);
+    const unknown = used(subject + body).filter(n => !allowed.includes(n));
+    const required = Object.entries(e.placeholders).filter(([, what]) => /\(required\)/.test(what)).map(([n]) => n);
+    const missing = required.filter(n => !used(subject + body).includes(n));
+    const problems = [];
+    if (unknown.length) problems.push(`Unknown: ${unknown.map(n => `{{${n}}}`).join(', ')} (it would be sent as typed)`);
+    if (missing.length) problems.push(`Missing ${missing.map(n => `{{${n}}}`).join(', ')}, which this email needs`);
+    return problems;
+  }
+
+  $('emailList').addEventListener('click', async ev => {
+    const btn = ev.target.closest('button[data-act]');
+    if (!btn) return;
+    const card = btn.closest('.email-card');
+    const e = emails.find(x => x.key === card.dataset.key);
+    const subject = card.querySelector('input.subject').value;
+    const body = card.querySelector('textarea').value;
+    const slot = card.querySelector('.msg-slot');
+    showMessage(slot, '');
+
+    if (btn.dataset.act === 'preview') {
+      const pv = card.querySelector('.preview');
+      pv.hidden = !pv.hidden;
+      // Previews use the real contact addresses from settings when there are any.
+      const sample = { ...e.sample, ...(contacts && 'contacts' in e.sample ? { contacts } : {}) };
+      pv.innerHTML = `<div class="subj">Subject: ${esc(fill(subject, sample))}</div>${esc(fill(body, sample))}`;
+      btn.textContent = pv.hidden ? 'Preview' : 'Hide preview';
+      return;
+    }
+    if (btn.dataset.act === 'save') {
+      if (!subject.trim() || !body.trim()) { showMessage(slot, 'The subject and text cannot be empty.'); return; }
+      const problems = checkTemplate(e, subject, body);
+      if (problems.length && !confirm(problems.join('\n') + '\n\nSave anyway?')) return;
+      const { error } = await client.from('email_templates').upsert({
+        key: e.key, subject, body, updated_at: new Date().toISOString(), updated_by: myEmail
+      });
+      if (error) { showMessage(slot, error.message); return; }
+      await load();
+      showMessage(document.querySelector(`.email-card[data-key="${e.key}"] .msg-slot`), 'Saved. The next email uses this wording.', 'ok');
+      return;
+    }
+    if (btn.dataset.act === 'reset') {
+      if (!confirm(`Go back to the original wording for "${e.name}"? Your edits will be lost.`)) return;
+      const { error } = await client.from('email_templates').delete().eq('key', e.key);
+      if (error) { showMessage(slot, error.message); return; }
+      await load();
+      showMessage(document.querySelector(`.email-card[data-key="${e.key}"] .msg-slot`), 'Back to the default wording.', 'ok');
+    }
+  });
+
+  // ---------- One-document view ----------
+  $('docBtn').addEventListener('click', () => {
+    $('docStamp').textContent = `As of ${fmtDateTime(new Date().toISOString())}. Words in {{double braces}} are filled in when each email is sent.`;
+    $('docBody').innerHTML = emails.map(e => {
+      const c = current(e);
+      return `<div class="doc-email">
+        <h3>${esc(e.name)}</h3>
+        <div class="meta"><strong>Sent:</strong> ${esc(e.sent)}<br><strong>To:</strong> ${esc(e.to)}<br>
+          <strong>Wording:</strong> ${e.edited ? 'edited in the app' : 'default'}</div>
+        <div class="preview"><div class="subj">Subject: ${esc(c.subject)}</div>${esc(c.body)}</div>
+      </div>`;
+    }).join('');
+    $('editView').hidden = true;
+    $('docView').hidden = false;
+    window.scrollTo(0, 0);
+  });
+  $('backBtn').addEventListener('click', () => { $('docView').hidden = true; $('editView').hidden = false; });
+  $('printBtn').addEventListener('click', () => window.print());
+
+  start().catch(err => showMessage($('guardMsg'), err.message));
+})();
+</script>
+</body>
+</html>

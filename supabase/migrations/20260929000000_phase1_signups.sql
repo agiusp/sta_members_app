@@ -98,6 +98,12 @@ language sql stable security definer set search_path = public as $$
     now());
 $$;
 
+-- A moment as members read it, e.g. "Monday 9:00am" (US Eastern).
+create function public.et_label(p_ts timestamptz) returns text
+language sql stable as $$
+  select to_char(p_ts at time zone 'America/New_York', 'FMDay FMHH12:MIam');
+$$;
+
 -- Email of the signed-in caller's active account, or null.
 create function public.my_email() returns text
 language sql stable security definer set search_path = public as $$
@@ -261,10 +267,10 @@ begin
   select * into sess from sessions where id = sid;
   if sid is null then raise exception 'There is no upcoming Sunday session'; end if;
   if app_now() < sess.signups_open_at then
-    raise exception 'Sign-ups for this Sunday open Monday at 9:00am';
+    raise exception 'Sign-ups for this Sunday open %', et_label(sess.signups_open_at);
   end if;
   if app_now() >= sess.signups_close_at then
-    raise exception 'Sign-ups for this Sunday closed Saturday at noon';
+    raise exception 'Sign-ups for this Sunday closed %', et_label(sess.signups_close_at);
   end if;
   if exists (select 1 from signups where session_id = sid
                 and player_id = p_player_id and cancelled_at is null) then
@@ -289,8 +295,8 @@ begin
   sid := current_session_id();
   select * into sess from sessions where id = sid;
   if sid is null or app_now() >= sess.signups_close_at then
-    raise exception 'Cancellations closed Saturday at noon. After that, contact %',
-      coalesce((select nullif(array_to_string(contact_emails, ' and/or '), '') from settings),
+    raise exception 'Cancellations closed %. After that, contact %',
+      et_label(sess.signups_close_at), coalesce((select nullif(array_to_string(contact_emails, ' and/or '), '') from settings),
                'the program organizers');
   end if;
   update signups set cancelled_at = app_now(), cancelled_by = me

@@ -2,11 +2,20 @@
 --
 -- Saturday flow (US Eastern): sign-ups close at 12:00; from then until 20:00 a
 -- developer arranges courts and locks them, and may unlock, edit and re-lock.
--- At 20:00 the locked assignments are final (emails come in Phase 4).
+-- At 20:00 the locked assignments are final and emailed (Phase 4). If nobody
+-- locked by 20:00, a developer can still lock until Sunday 07:00 ("late
+-- lock"); the emails then go out right away and the lock is final at once.
+--
+-- Instead of assigning courts, a developer can lock the week in a weather
+-- mode: 'rain_expected' (a rain-out is expected; show up anyway if the
+-- forecast is wrong) or 'self_organized' (uncertain weather; show up and
+-- self-organize). Either way no courts are assigned.
 -- Assignments of earlier Sundays are the play history used for the ball
 -- roster and the repeat-grouping check.
 
 alter table public.sessions
+  add column week_mode text not null default 'courts'
+    check (week_mode in ('courts', 'rain_expected', 'self_organized')),
   add column org_play  text check (org_play in ('same-sex', 'mixed', 'level', 'level-samesex', 'level-mixed')),
   add column locked_at timestamptz,
   add column locked_by text;
@@ -41,7 +50,7 @@ begin
   return jsonb_build_object(
     'now', app_now(),
     'test_mode', (select test_mode from settings),
-    'session', to_jsonb(sess),
+    'session', to_jsonb(sess) || jsonb_build_object('late_lock_until', late_lock_until(sess.play_date)),
     'lineup', coalesce((
       select jsonb_agg(jsonb_build_object(
                'id', p.id, 'first_name', p.first_name, 'last_name', p.last_name,
@@ -64,8 +73,16 @@ begin
 end;
 $$;
 
+-- Last moment a developer can still lock a week nobody locked by 8pm Saturday.
+create function public.late_lock_until(p_play_date date) returns timestamptz
+language sql immutable as $$
+  select (p_play_date + time '07:00') at time zone 'America/New_York';
+$$;
+
 -- p_courts: [{"court": 1, "players": [{"player_id": 12, "brings_balls": true}, ...]}, ...]
-create function public.dev_lock_courts(p_org_play text, p_courts jsonb) returns void
+-- p_mode: 'courts', or a weather mode with p_courts = [].
+create function public.dev_lock_courts(p_org_play text, p_courts jsonb, p_mode text default 'courts')
+returns void
 language plpgsql security definer set search_path = public as $$
 declare
   sid  bigint;
@@ -77,13 +94,26 @@ begin
   select * into sess from sessions where id = sid;
   if sid is null then raise exception 'There is no upcoming Sunday session'; end if;
   if now_ < sess.signups_close_at then
-    raise exception 'Courts can be locked once sign-ups close, Saturday at noon';
-  end if;
-  if now_ >= sess.courts_publish_at then
-    raise exception 'Court assignments became final at 8pm Saturday and can no longer be changed';
+    raise exception 'Courts can be locked once sign-ups close, %', et_label(sess.signups_close_at);
   end if;
   if sess.locked_at is not null then
     raise exception 'The courts are already locked. Unlock them first to make changes';
+  end if;
+  if now_ >= late_lock_until(sess.play_date) then
+    raise exception 'It is too late to lock the courts: the cutoff was %', et_label(late_lock_until(sess.play_date));
+  end if;
+  if p_mode not in ('courts', 'rain_expected', 'self_organized') then
+    raise exception 'Unknown option for this week';
+  end if;
+
+  if p_mode <> 'courts' then
+    if jsonb_array_length(coalesce(p_courts, '[]'::jsonb)) > 0 then
+      raise exception 'No courts are assigned when the week is set to a weather option';
+    end if;
+    delete from assignments where session_id = sid;
+    update sessions set locked_at = now_, locked_by = my_email(), org_play = null, week_mode = p_mode
+     where id = sid;
+    return;
   end if;
 
   if exists (
@@ -115,7 +145,8 @@ begin
     raise exception 'Only players signed up for this Sunday can be put on a court';
   end if;
 
-  update sessions set locked_at = now_, locked_by = my_email(), org_play = p_org_play
+  update sessions set locked_at = now_, locked_by = my_email(), org_play = p_org_play,
+                      week_mode = 'courts'
    where id = sid;
 end;
 $$;
@@ -132,7 +163,7 @@ begin
   select * into sess from sessions where id = sid;
   if sid is null or sess.locked_at is null then raise exception 'The courts are not locked'; end if;
   if app_now() >= sess.courts_publish_at then
-    raise exception 'Court assignments became final at 8pm Saturday and can no longer be changed';
+    raise exception 'Court assignments became final % and can no longer be changed', et_label(sess.courts_publish_at);
   end if;
   update sessions set locked_at = null, locked_by = null where id = sid;
 end;
@@ -183,7 +214,7 @@ begin
 end;
 $$;
 
-revoke all on function public.dev_scheduler_data(), public.dev_lock_courts(text, jsonb),
+revoke all on function public.dev_scheduler_data(), public.dev_lock_courts(text, jsonb, text),
   public.dev_unlock_courts() from anon, public;
-grant execute on function public.dev_scheduler_data(), public.dev_lock_courts(text, jsonb),
+grant execute on function public.dev_scheduler_data(), public.dev_lock_courts(text, jsonb, text),
   public.dev_unlock_courts() to authenticated;

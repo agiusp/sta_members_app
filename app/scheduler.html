@@ -90,6 +90,13 @@
     <h2 id="sessionTitle"></h2>
     <div class="lock-status" id="lockStatus"></div>
     <div class="row">
+      <label>This week
+        <select id="weekMode">
+          <option value="courts">Assign courts</option>
+          <option value="rain_expected">Rain-out expected: no courts</option>
+          <option value="self_organized">Uncertain weather: self-organized play</option>
+        </select></label>
+      <span class="row" id="courtControls">
       <label>Organized Play
         <select id="orgPlay">
           <option value="same-sex">Same-sex doubles</option>
@@ -100,12 +107,16 @@
         </select></label>
       <button id="autoAssignBtn">Auto-Assign Courts</button>
       <button class="secondary" id="clearBtn">Clear Courts</button>
+      </span>
       <button id="lockBtn">Lock courts</button>
       <button class="secondary" id="unlockBtn" hidden>Unlock</button>
     </div>
     <div id="msg"></div>
   </section>
 
+  <section class="panel" id="weatherNote" hidden></section>
+
+  <div id="courtsArea">
   <div class="move-hint" id="moveHint" hidden></div>
   <div class="courts-grid" id="courtsGrid"></div>
 
@@ -127,6 +138,7 @@
   <p class="muted">Tap one player, then another, to swap them; or tap a player, then an empty spot, to move them.
     If a player can't come, swap their replacement in from the bench, then tap the player and choose
     <em>Remove from this week</em>. Everyone left on the bench gets the "no spot this week" email at 8pm.</p>
+  </div>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/dist/umd/supabase.js"
@@ -139,6 +151,11 @@
   const { client, esc, rpc, fmtDateTime, fmtPlayDate, showMessage } = STA;
   const $ = id => document.getElementById(id);
   const COURT_SIZE = 4;
+  const WEEK_LABEL = {
+    courts: 'Assign courts',
+    rain_expected: 'Rain-out expected: no courts',
+    self_organized: 'Uncertain weather: self-organized play'
+  };
 
   let data = null;          // from dev_scheduler_data
   let byId = new Map();     // player id -> lineup player
@@ -178,16 +195,21 @@
     const onCourt = new Set(boxes.flat());
     bench = data.lineup.filter(p => !onCourt.has(p.id)).map(p => p.id);
     if (data.session.org_play) $('orgPlay').value = data.session.org_play;
+    $('weekMode').value = data.session.locked_at ? data.session.week_mode : 'courts';
     render();
   }
 
   // ---------- State of the week ----------
   function state() {
     const s = data.session, now = new Date(data.now);
-    const final = now >= new Date(s.courts_publish_at);
+    const afterPublish = now >= new Date(s.courts_publish_at);
     const locked = !!s.locked_at;
     const beforeCutoff = now < new Date(s.signups_close_at);
-    return { final, locked, beforeCutoff, editable: !final && !locked };
+    const tooLate = !locked && now >= new Date(s.late_lock_until);
+    const late = !locked && afterPublish && !tooLate; // not locked by 8pm, can still lock
+    const final = (locked && afterPublish) || tooLate;
+    return { final, locked, late, tooLate, beforeCutoff,
+             editable: !locked && !tooLate, canUnlock: locked && !afterPublish };
   }
 
   // ---------- History: ball roster and repeat groupings ----------
@@ -358,29 +380,48 @@
     $('testBanner').textContent = `Test mode: the app is pretending it's ${fmtDateTime(data.now)}.`;
     $('sessionTitle').textContent = `${fmtPlayDate(s.play_date)} · ${s.num_courts} courts`;
 
+    const weekMode = $('weekMode').value;
+    const weather = weekMode !== 'courts';
+    const lockedAs = s.week_mode !== 'courts' ? ` as "${WEEK_LABEL[s.week_mode]}"` : '';
     const status = $('lockStatus');
     if (st.final) {
       status.className = 'lock-status final';
-      status.textContent = s.locked_at
-        ? `Final. These courts were locked by ${s.locked_by} and became final at ${fmtDateTime(s.courts_publish_at)}.`
-        : `The courts were not locked before ${fmtDateTime(s.courts_publish_at)}.`;
+      status.textContent = st.tooLate
+        ? `Not locked by the 7am Sunday cutoff (${fmtDateTime(s.late_lock_until)}), so no emails went to players this week.`
+        : `Final. Locked${lockedAs} by ${s.locked_by} at ${fmtDateTime(s.locked_at)}; the player emails ${s.published_at ? `went out ${fmtDateTime(s.published_at)}` : 'go out within a minute'}.`;
     } else if (st.locked) {
       status.className = 'lock-status locked';
-      status.textContent = `Locked by ${s.locked_by} at ${fmtDateTime(s.locked_at)}. You can unlock and change them until ${fmtDateTime(s.courts_publish_at)}, when they become final.`;
+      status.textContent = `Locked${lockedAs} by ${s.locked_by} at ${fmtDateTime(s.locked_at)}. You can unlock and change this until ${fmtDateTime(s.courts_publish_at)}, when the player emails go out.`;
+    } else if (st.late) {
+      status.className = 'lock-status open';
+      status.textContent = `Not locked by 8pm, so no emails have gone to players yet. You can still lock until ${fmtDateTime(s.late_lock_until)}: the emails then go out within a minute, and a late lock can't be undone.`;
     } else {
       status.className = 'lock-status open';
       status.textContent = st.beforeCutoff
         ? `Sign-ups are open until ${fmtDateTime(s.signups_close_at)}, so the line-up can still change. You can try arrangements now; locking opens at noon Saturday.`
-        : `Not locked yet. Arrange the courts, then lock them before ${fmtDateTime(s.courts_publish_at)}.`;
+        : `Not locked yet. Arrange the courts (or choose a weather option), then lock before ${fmtDateTime(s.courts_publish_at)}.`;
     }
 
+    $('weekMode').disabled = !st.editable;
     $('orgPlay').disabled = !st.editable;
     $('autoAssignBtn').disabled = !st.editable;
     $('clearBtn').disabled = !st.editable;
-    $('lockBtn').hidden = st.locked || st.final;
+    $('lockBtn').hidden = !st.editable;
     $('lockBtn').disabled = st.beforeCutoff;
-    $('unlockBtn').hidden = !st.locked || st.final;
+    $('lockBtn').textContent = (weather ? 'Confirm: no courts this week' : 'Lock courts') + (st.late ? ' and send now' : '');
+    $('unlockBtn').hidden = !st.canUnlock;
     $('content').classList.toggle('locked', !st.editable);
+    $('courtControls').hidden = weather;
+    $('courtsArea').hidden = weather;
+    $('weatherNote').hidden = !weather;
+    if (weather) {
+      $('weatherNote').innerHTML = `<div class="panel-title">${esc(WEEK_LABEL[weekMode])}</div>
+        <p>No courts are assigned this week. ${st.editable ? 'Once confirmed, at' : 'At'} 8pm Saturday${st.late ? ' (or right away, since it is past 8pm)' : ''}, all
+        <strong>${data.lineup.length}</strong> signed-up player(s), including the waitlist, get an email saying
+        ${weekMode === 'rain_expected'
+          ? 'the forecast for tomorrow looks pretty bad and no courts have been assigned, but if the forecast is wrong they are welcome to show up and enjoy self-organized play.'
+          : 'the forecast for tomorrow is not looking good, no courts have been assigned, and they should show up and enjoy self-organized play.'}</p>`;
+    }
 
     const grid = $('courtsGrid');
     grid.innerHTML = '';
@@ -444,6 +485,18 @@
   }
 
   async function lockCourts() {
+    const st = state();
+    const weekMode = $('weekMode').value;
+    const lateNote = st.late ? "\n\nIt's past 8pm: the emails go out within a minute, and this can't be undone." : '';
+    if (weekMode !== 'courts') {
+      if (!confirm(`Set this Sunday to "${WEEK_LABEL[weekMode]}"? No courts will be assigned, and all ${data.lineup.length} signed-up player(s), including the waitlist, get the weather email ${st.late ? 'within a minute' : 'at 8pm'}.` + lateNote)) return;
+      try {
+        await rpc('dev_lock_courts', { p_org_play: null, p_courts: [], p_mode: weekMode });
+        showMessage($('msg'), 'Locked with no courts this week.', 'ok');
+        await load();
+      } catch (err) { showMessage($('msg'), err.message); }
+      return;
+    }
     const mode = $('orgPlay').value;
     const problems = [];
     boxes.forEach((ids, i) => {
@@ -456,7 +509,8 @@
     if (benchedWithSpot) problems.push(`${benchedWithSpot} player(s) who got a spot are on the bench, not on a court`);
     const msg = (problems.length ? `Heads up: ${problems.join('; ')}.\n\n` : '') +
       'Lock these courts?' +
-      (bench.length ? ` The ${bench.length} player(s) on the bench (${benchedWithSpot} with a spot, ${benchedWaitlist} from the waitlist) will get the "no spot this week" email at 8pm.` : '');
+      (bench.length ? ` The ${bench.length} player(s) on the bench (${benchedWithSpot} with a spot, ${benchedWaitlist} from the waitlist) will get the "no spot this week" email ${st.late ? 'within a minute' : 'at 8pm'}.` : '') +
+      lateNote;
     if (!confirm(msg)) return;
 
     const courts = boxes.map((ids, i) => {
@@ -479,6 +533,7 @@
   }
 
   $('orgPlay').addEventListener('change', render);
+  $('weekMode').addEventListener('change', () => { selected = null; render(); });
   $('autoAssignBtn').addEventListener('click', autoAssign);
   $('clearBtn').addEventListener('click', clearCourts);
   $('lockBtn').addEventListener('click', lockCourts);

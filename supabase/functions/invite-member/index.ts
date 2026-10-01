@@ -1,7 +1,11 @@
-// Sends a member their invite email so they can set a password.
-// Only developers may call it, and only for emails already in the accounts
-// table, so nobody outside the member list can get an account.
+// Sends a member their setup-invite so they can set a password. Supabase
+// makes the personal link; the email itself uses the app's editable wording
+// (Developer area > Emails and schedule). Only developers may call it, and
+// only for current members already in the accounts table, so nobody outside
+// the member list can get an account.
 import { createClient } from "npm:@supabase/supabase-js@2.117.2";
+import { loadTemplates, render, contactsLabel } from "../_shared/emails.ts";
+import { sendEmail } from "../_shared/send-email.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -37,15 +41,39 @@ Deno.serve(async (req) => {
   if (!account.membership_current) {
     return reply({ error: "This member's membership has lapsed. Mark it current once dues are paid, then invite them." }, 400);
   }
-  // Resending is fine until the member accepts (e.g. the first link expired).
+  // Resending: an invite that was never accepted is replaced by a fresh one
+  // (the unaccepted sign-in user holds no data).
   if (account.user_id) {
     const { data: existing } = await admin.auth.admin.getUserById(account.user_id);
     if (existing?.user?.email_confirmed_at) {
       return reply({ error: "This member already has an account. They can use \"Forgot password\" to get back in." }, 400);
     }
+    await admin.auth.admin.deleteUser(account.user_id);
   }
 
-  const { error } = await admin.auth.admin.inviteUserByEmail(cleanEmail, { redirectTo });
+  const { data: link, error } = await admin.auth.admin.generateLink({
+    type: "invite", email: cleanEmail, options: { redirectTo },
+  });
   if (error) return reply({ error: error.message }, 400);
+
+  const [{ data: names }, { data: settings }] = await Promise.all([
+    admin.rpc("account_player_names", { p_email: cleanEmail }),
+    admin.from("settings").select("contact_emails").maybeSingle(),
+  ]);
+  const message = render(await loadTemplates(admin), "setup_invite", {
+    player_names: names ?? cleanEmail,
+    link: link.properties.action_link,
+    contacts: contactsLabel(settings?.contact_emails ?? []),
+  });
+  let sendError: string | null = null;
+  try {
+    await sendEmail(cleanEmail, message.subject, message.text);
+  } catch (e) {
+    sendError = String(e instanceof Error ? e.message : e);
+  }
+  await admin.from("email_log").insert({
+    kind: "setup_invite", to_email: cleanEmail, subject: message.subject, error: sendError,
+  });
+  if (sendError) return reply({ error: sendError }, 502);
   return reply({ ok: true });
 });

@@ -27,6 +27,7 @@ Then open:
 | Developer area | http://127.0.0.1:3000/app/developer.html |
 | Scheduler (developers) | http://127.0.0.1:3000/app/scheduler.html |
 | Designated Courts (members, from Saturday 8pm) | http://127.0.0.1:3000/app/courts.html |
+| Emails and schedule (developers) | http://127.0.0.1:3000/app/emails.html |
 | Test inbox (catches every email the app sends) | http://127.0.0.1:54324 |
 | Database dashboard (Supabase Studio) | http://127.0.0.1:54323 |
 
@@ -48,12 +49,14 @@ To test a busy week, use **Simulate sign-ups** in the Developer area's test pane
 
 `supabase db reset` wipes the local database and reloads the test data. Accounts created before the reset stop working, and old invite links in the test inbox go dead.
 
-## Emails and timed tasks
+## Emails and schedule
 
-- **Email wording:** every email the app sends is in `supabase/functions/_shared/emails.ts`. The setup-invite is Supabase's own email and isn't in this file.
-- **Timed tasks:** the Saturday 5pm lock reminder and the 8pm court and no-spot emails are sent by the `timed-tasks` function. Online, a scheduler will call it every few minutes. Locally, set the test clock and click **Run timed tasks now** in the Developer area. Each task runs only once per week.
-- **Where emails go:** locally, every email lands in the test inbox, whatever the address. Online, they go through the email service set by the `RESEND_API_KEY` secret.
-- **New functions:** after adding a function under `supabase/functions/`, restart Supabase (`supabase stop && supabase start`). The function runtime only registers functions when it starts.
+- **Wording:** developers edit every email in the app, under **Developer area > Emails and schedule**. Edits are saved in the database and used from the next email. The default wording, used until an email is edited and after **Reset to default**, is in `supabase/functions/_shared/default-emails.ts`. The page can also show all emails as one printable document.
+- **Timing:** the same page sets the day and time of every deadline and timed email (sign-ups open and close, the Saturday developer emails, the player emails, the late-lock cutoff), plus on/off switches for the optional emails. The conditions (for example, "only if nothing is locked yet") are fixed in `claim_due_tasks` in the database.
+- **Timed tasks:** the `timed-tasks` function sends whatever is due. Online, a scheduler will call it every minute. Locally, set the test clock and click **Run timed tasks now** in the Developer area.
+- **Where emails go:** locally, every email lands in the test inbox, whatever the address. Online, they go through the email service set by the `RESEND_API_KEY` secret. "Forgot password" emails are the only ones still sent by Supabase itself.
+- **Restart after changing function code:** after editing or adding anything under `supabase/functions/`, run `supabase stop && supabase start`. The local function runtime caches the code.
+- **Migration gotcha:** Supabase's migration tool can misread a `case ... end` expression inside a function's `if` condition. Use `if`/`else` with a variable instead.
 
 ## Automated tests
 

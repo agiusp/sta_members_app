@@ -73,8 +73,23 @@
     const title = `<h2>${esc(fmtPlayDate(d.session.play_date))}, 9–10:30am</h2>`;
     if (!d.ready) {
       $('body').innerHTML = title + (d.not_locked
-        ? '<p>Court assignments are not available this week. Please check your email or contact the organizers.</p>'
+        ? "<p>Court assignments haven't been posted yet. They'll appear here, and be sent by email, as soon as they are.</p>"
         : `<p>Court assignments will be posted here, and sent by email, at <strong>${esc(fmtDateTime(d.session.courts_publish_at))}</strong>.</p>`);
+      return;
+    }
+    const contacts = (d.contact_emails || []).map(e => `<a href="mailto:${esc(e)}">${esc(e)}</a>`).join(' and/or ');
+    const todayEastern = new Date(d.now).toLocaleDateString('en-CA', { timeZone: STA.TZ });
+    const day = todayEastern === d.session.play_date ? 'today' : 'tomorrow';
+    if (d.week_mode === 'rain_expected') {
+      $('body').innerHTML = title + `<p><strong>Rain-out expected: no courts have been assigned.</strong></p>
+        <p>The forecast for ${day} looks pretty bad, so we expect a rain-out. In the event that the forecast is wrong, you are welcome to show up at 9am and enjoy self-organized play.</p>
+        ${contacts ? `<p class="muted">Questions? Contact ${contacts}.</p>` : ''}`;
+      return;
+    }
+    if (d.week_mode === 'self_organized') {
+      $('body').innerHTML = title + `<p><strong>Self-organized play: no courts have been assigned.</strong></p>
+        <p>The forecast for ${day} is not looking good. Please show up at 9am as planned and enjoy self-organized play.</p>
+        ${contacts ? `<p class="muted">Questions? Contact ${contacts}.</p>` : ''}`;
       return;
     }
     $('body').innerHTML = title + `
