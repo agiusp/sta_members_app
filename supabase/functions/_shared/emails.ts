@@ -65,6 +65,14 @@ export function dayWord(nowIso: string, playDate: string): string {
   return todayEastern === playDate ? "today" : "tomorrow";
 }
 
+// Whether nowIso is the day after playDate (Eastern), e.g. Monday after a Sunday.
+export function dayAfter(nowIso: string, playDate: string): boolean {
+  const todayEastern = new Date(nowIso).toLocaleDateString("en-CA", { timeZone: "America/New_York" });
+  const [y, m, d] = playDate.split("-").map(Number);
+  const next = new Date(Date.UTC(y, m - 1, d + 1)).toISOString().slice(0, 10);
+  return todayEastern === next;
+}
+
 export const WEATHER_OPTION: Record<string, string> = {
   rain_expected: "Rain-out expected",
   self_organized: "Self-organized play",

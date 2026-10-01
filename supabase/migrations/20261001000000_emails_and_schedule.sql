@@ -324,10 +324,18 @@ begin
   if sched_on('play_invite') and sess.play_invite_sent_at is null
      and now_ >= sess.signups_open_at and now_ < sess.signups_close_at then
     update sessions set play_invite_sent_at = now_ where id = sid;
+    -- played: whether one of the account's players was on a court last
+    -- Sunday, so the email can invite them to review their game.
     tasks := tasks || jsonb_build_array(base || jsonb_build_object(
       'kind', 'play_invite',
+      'last_play_date', (select play_date from sessions where id = review_session_id()),
       'recipients', coalesce((
-        select jsonb_agg(a.email) from accounts a join auth.users u on u.id = a.user_id
+        select jsonb_agg(jsonb_build_object('email', a.email, 'played', exists (
+                 select 1 from assignments x join players p on p.id = x.player_id
+                   join sessions ls on ls.id = x.session_id
+                  where x.session_id = review_session_id() and ls.locked_at is not null
+                    and p.account_email = a.email)))
+          from accounts a join auth.users u on u.id = a.user_id
          where a.active and a.membership_current and u.email_confirmed_at is not null), '[]'::jsonb)));
   end if;
 

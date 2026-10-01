@@ -66,7 +66,7 @@ What the app stores: your name, email address, play level, and which Sundays you
 Sign up below for the Sunday doubles match, {{date}} at 9-10:30am
 
 {{signup_link}}
-
+{{review_note}}
 Deadline: Sign up or make changes by noon on Saturday.
 After that, contact {{contacts}}
 
@@ -80,9 +80,29 @@ What to know:
     placeholders: {
       date: "the Sunday's date, e.g. October 4",
       signup_link: "the link to the sign-up page",
+      review_note: "the \"Review my Game\" paragraph below, only for members who played last Sunday; nothing for everyone else",
       contacts: CONTACTS,
     },
-    sample: { date: "October 4", signup_link: "https://<app address>/app/", contacts: SAMPLE_CONTACTS },
+    sample: {
+      date: "October 4", signup_link: "https://<app address>/app/", contacts: SAMPLE_CONTACTS,
+      review_note: "\nThank you for playing yesterday! Please take a minute to review your game (the sets you played, your partners and the scores) here:\nhttps://<app address>/app/review.html\n",
+    },
+  },
+  {
+    key: "play_invite_review_note",
+    name: "Play-invite: \"Review my Game\" paragraph",
+    sent: "Inside the play-invite, filling its {{review_note}}",
+    to: "Only members whose player was on a court last Sunday",
+    subject: "(not used: this is a paragraph inside the play-invite)",
+    body: `
+Thank you for playing {{day}}! Please take a minute to review your game (the sets you played, your partners and the scores) here:
+{{review_link}}
+`,
+    placeholders: {
+      day: "\"yesterday\", or \"last Sunday\" if the play-invite goes out later in the week",
+      review_link: "the link to the Review my Game tab",
+    },
+    sample: { day: "yesterday", review_link: "https://<app address>/app/review.html" },
   },
   {
     key: "moved_off_waitlist",

@@ -37,8 +37,17 @@ function emailsFor(task: any, t: Templates, appUrl: string): Outgoing[] {
 
   switch (task.kind) {
     case "play_invite": {
-      const email = E.render(t, "play_invite", { date, signup_link: appUrl, contacts });
-      return task.recipients.map((to: string) => ({ kind: "play_invite", to, email }));
+      // Members who played last Sunday also get the "Review my Game" paragraph.
+      const reviewNote = task.last_play_date
+        ? E.render(t, "play_invite_review_note", {
+            day: E.dayAfter(task.now, task.last_play_date) ? "yesterday" : "last Sunday",
+            review_link: appUrl + "review.html",
+          }).text
+        : "";
+      return task.recipients.map((r: any) => ({
+        kind: "play_invite", to: r.email,
+        email: E.render(t, "play_invite", { date, signup_link: appUrl, contacts, review_note: r.played ? reviewNote : "" }),
+      }));
     }
     case "moved_off_waitlist":
       return task.players.map((p: any) => ({

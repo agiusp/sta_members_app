@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>STA Review my Game</title>
+<link rel="stylesheet" href="styles.css">
+<style>
+  .set-row { border-top: 1px solid #eceef1; padding: 12px 0; }
+  .set-row:first-child { border-top: none; }
+  .set-title { font-weight: 700; margin-bottom: 8px; }
+  .vs { font-size: 13px; color: var(--muted); margin-top: 6px; }
+  .score input { width: 70px; }
+  .result-table td, .result-table th { font-size: 14px; }
+  .result-list { margin: 10px 0 0; padding-left: 20px; font-size: 14px; }
+  .result-list li { margin-bottom: 4px; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Review my Game</h1>
+  <div class="who">
+    <a href="./">Sign-up page</a>
+    <a href="courts.html">Designated Courts</a>
+  </div>
+</header>
+
+<div class="test-banner" id="testBanner" hidden></div>
+
+<section class="panel">
+  <div id="body"><p class="muted">Loading…</p></div>
+  <div id="msg"></div>
+</section>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/dist/umd/supabase.js"
+        integrity="sha384-Rj26LVGvoeRVR6+mwQmFfcR3QOBEwT+ZmuCWpuiqeTzJpCs0ER4ITAWGb4Hiy3Ok"
+        crossorigin="anonymous"></script>
+<script src="config.js"></script>
+<script src="common.js"></script>
+<script>
+(function () {
+  const { client, esc, rpc, fmtDateTime, fmtPlayDate, showMessage } = STA;
+  const $ = id => document.getElementById(id);
+  let data = null, playerId = null, editing = false;
+
+  async function start() {
+    const { data: { session } } = await client.auth.getSession();
+    if (!session) { location.href = './'; return; }
+    await load();
+  }
+
+  async function load() {
+    try { data = await rpc('my_review'); }
+    catch (err) {
+      $('body').innerHTML = '';
+      showMessage($('msg'), err.message === 'Not a member' ? 'This email is not on the active member list.' : err.message);
+      return;
+    }
+    const week = await rpc('my_week').catch(() => null);
+    $('testBanner').hidden = !(week && week.test_mode);
+    if (week) $('testBanner').textContent = `Test mode: the app is pretending it's ${fmtDateTime(week.now)}.`;
+    const played = (data.players || []).filter(p => p.played);
+    if (!played.some(p => p.id === playerId)) playerId = played[0]?.id ?? null;
+    editing = false;
+    render();
+  }
+
+  const player = () => data.players.find(p => p.id === playerId);
+  const teamName = names => names.join(' & ');
+
+  function render() {
+    if (!data.session) { $('body').innerHTML = '<p>There is no game to review yet.</p>'; return; }
+    const date = fmtPlayDate(data.session.play_date);
+    const played = data.players.filter(p => p.played);
+    let html = `<h2>${esc(date)}</h2>`;
+
+    if (!played.length) {
+      $('body').innerHTML = html + `<p>Our records show that you did not play on ${esc(date)}, so there is no game for you to review.</p>
+        <p class="muted">Only players who were assigned to a court that Sunday can review it.</p>`;
+      return;
+    }
+    if (played.length > 1) {
+      html += `<div class="row" style="margin-bottom:12px"><label>Reviewing for
+        <select id="playerSelect">${played.map(p =>
+          `<option value="${p.id}" ${p.id === playerId ? 'selected' : ''}>${esc(p.name)}</option>`).join('')}</select></label></div>`;
+    }
+    const p = player();
+    const singles = p.courtmates.length === 1;
+    html += `<p>${esc(p.name)} played on <strong>Court ${p.court}</strong> with ${esc(p.courtmates.map(m => m.name).join(', '))}${singles ? ' (singles)' : ''}.</p>`;
+
+    if (p.review && !editing) {
+      html += resultHtml(p.review.sets) +
+        `<p class="muted">Submitted ${esc(fmtDateTime(p.review.submitted_at))}.</p>` +
+        (data.open ? '<div class="row"><button class="secondary" id="editBtn">Edit my review</button></div>' : '') +
+        closesNote();
+    } else if (!data.open) {
+      html += `<p>Reviews for this game closed ${esc(fmtDateTime(data.session.closes_at))}.</p>`;
+    } else {
+      html += formHtml(p, singles) + closesNote();
+    }
+    $('body').innerHTML = html;
+    wire(p, singles);
+  }
+
+  function closesNote() {
+    return data.open ? `<p class="muted">You can change your review until ${esc(fmtDateTime(data.session.closes_at))}.</p>` : '';
+  }
+
+  // ---------- The form ----------
+  function formHtml(p, singles) {
+    const prev = p.review ? p.review.sets : [];
+    const count = prev.length || 2;
+    return `<div class="row" style="margin-bottom:6px">
+        <label>Number of sets played
+          <select id="setCount">${[1, 2, 3, 4, 5].map(n => `<option ${n === count ? 'selected' : ''}>${n}</option>`).join('')}</select></label>
+      </div>
+      <div id="sets">${setRows(p, singles, count, prev)}</div>
+      <div class="row" style="margin-top:8px"><button id="submitBtn">Submit my review</button>
+        ${p.review ? '<button class="secondary" id="cancelEditBtn">Cancel</button>' : ''}</div>`;
+  }
+
+  function setRows(p, singles, count, prev) {
+    let rows = '';
+    for (let i = 0; i < count; i++) {
+      const pv = prev[i] || {};
+      const partner = singles ? '' : `<label>Your partner
+          <select class="partner"><option value="">Choose…</option>${p.courtmates.map(m =>
+            `<option value="${m.id}" ${pv.partner_id === m.id ? 'selected' : ''}>${esc(m.name)}</option>`).join('')}</select></label>`;
+      rows += `<div class="set-row" data-set="${i}">
+        <div class="set-title">Set ${i + 1}</div>
+        <div class="row">${partner}
+          <span class="row score">
+            <label>${singles ? 'Your games' : 'Games won by you and your partner'}
+              <input type="number" class="mine" min="0" max="7" step="1" value="${pv.team1_games ?? ''}"></label>
+            <label>${singles ? 'Opponent\'s games' : 'Games won by your opponents'}
+              <input type="number" class="theirs" min="0" max="7" step="1" value="${pv.team2_games ?? ''}"></label>
+          </span>
+        </div>
+        <div class="vs">${singles ? `You vs. ${esc(p.courtmates[0].name)}` : 'Choose your partner to see your opponents.'}</div>
+      </div>`;
+    }
+    return rows;
+  }
+
+  function updateOpponents(p) {
+    document.querySelectorAll('.set-row').forEach(row => {
+      const sel = row.querySelector('.partner');
+      if (!sel) return;
+      const partner = p.courtmates.find(m => String(m.id) === sel.value);
+      row.querySelector('.vs').textContent = partner
+        ? `${p.name} & ${partner.name} vs. ${p.courtmates.filter(m => m !== partner).map(m => m.name).join(' & ')}`
+        : 'Choose your partner to see your opponents.';
+    });
+  }
+
+  function wire(p, singles) {
+    $('playerSelect')?.addEventListener('change', e => { playerId = Number(e.target.value); editing = false; render(); });
+    $('editBtn')?.addEventListener('click', () => { editing = true; render(); });
+    $('cancelEditBtn')?.addEventListener('click', () => { editing = false; render(); });
+    $('setCount')?.addEventListener('change', e => {
+      $('sets').innerHTML = setRows(p, singles, Number(e.target.value), p.review ? p.review.sets : []);
+      updateOpponents(p);
+    });
+    $('sets')?.addEventListener('change', () => updateOpponents(p));
+    $('submitBtn')?.addEventListener('click', () => submit(p, singles));
+    if ($('sets')) updateOpponents(p);
+  }
+
+  async function submit(p, singles) {
+    showMessage($('msg'), '');
+    const sets = [];
+    for (const row of document.querySelectorAll('.set-row')) {
+      const n = Number(row.dataset.set) + 1;
+      const partner = singles ? null : Number(row.querySelector('.partner').value) || null;
+      const mine = row.querySelector('.mine').value, theirs = row.querySelector('.theirs').value;
+      if (!singles && !partner) { showMessage($('msg'), `Set ${n}: choose your partner.`); return; }
+      const ok = v => /^\d+$/.test(v) && Number(v) <= 7;
+      if (!ok(mine) || !ok(theirs)) { showMessage($('msg'), `Set ${n}: enter the games won by each side, from 0 to 7.`); return; }
+      sets.push({ partner_id: partner, my_games: Number(mine), their_games: Number(theirs) });
+    }
+    try {
+      data = await rpc('submit_review', { p_player_id: p.id, p_sets: sets });
+      editing = false;
+      render();
+      showMessage($('msg'), 'Thank you! Your review was saved.', 'ok');
+    } catch (err) { showMessage($('msg'), err.message); }
+  }
+
+  // ---------- The result table ----------
+  function resultHtml(sets) {
+    const rows = sets.map(s => `<tr><td>${esc(teamName(s.team1))}</td><td>${esc(teamName(s.team2))}</td>
+      <td>${s.team1_games}-${s.team2_games}</td></tr>`).join('');
+    const lines = sets.map(s => {
+      const score = `${s.team1_games}-${s.team2_games}`; // always player set 1 - player set 2, as in the table
+      if (s.team1_games > s.team2_games) return `Set ${s.set_number}: player set 1 (${esc(teamName(s.team1))}) won the set ${score}.`;
+      if (s.team2_games > s.team1_games) return `Set ${s.set_number}: player set 2 (${esc(teamName(s.team2))}) won the set ${score}.`;
+      return `Set ${s.set_number}: tied ${s.team1_games}-${s.team2_games} (not finished).`;
+    });
+    return `<div class="table-wrap"><table class="result-table">
+        <tr><th>Player set 1</th><th>Player set 2</th><th>Set score</th></tr>${rows}
+      </table></div>
+      <ul class="result-list">${lines.map(l => `<li>${l}</li>`).join('')}</ul>`;
+  }
+
+  start().catch(err => showMessage($('msg'), err.message));
+})();
+</script>
+</body>
+</html>

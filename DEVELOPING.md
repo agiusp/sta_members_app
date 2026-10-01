@@ -28,6 +28,7 @@ Then open:
 | Scheduler (developers) | http://127.0.0.1:3000/app/scheduler.html |
 | Designated Courts (members, from Saturday 8pm) | http://127.0.0.1:3000/app/courts.html |
 | Emails and schedule (developers) | http://127.0.0.1:3000/app/emails.html |
+| Review my Game (members) | http://127.0.0.1:3000/app/review.html |
 | Test inbox (catches every email the app sends) | http://127.0.0.1:54324 |
 | Database dashboard (Supabase Studio) | http://127.0.0.1:54323 |
 

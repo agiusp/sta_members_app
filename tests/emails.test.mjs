@@ -59,7 +59,7 @@ await check('members cannot read or change email wording or the schedule', async
 await check('the Emails page gets every email with its wording, and the schedule', async () => {
   const r = await call('/functions/v1/email-admin', { token: dev, body: {} });
   assert.equal(r.status, 200, JSON.stringify(r.data));
-  assert.equal(r.data.emails.length, 13);
+  assert.equal(r.data.emails.length, 14);
   assert.ok(r.data.emails.every(e => e.subject && e.body && e.sent && e.to && e.edited === null));
   assert.equal(r.data.schedule.length, 10);
 });
