@@ -22,7 +22,8 @@
       <li>Install an authenticator app if you don't have one, e.g. Google Authenticator, Microsoft Authenticator, or the Passwords app on an iPhone.</li>
       <li>In the app, add an account by scanning this code:
         <img class="qr" id="qr" alt="Code to scan with your authenticator app">
-        Or type in this key: <span class="secret" id="secret"></span></li>
+        Or type in this key: <span class="secret" id="secret"></span>
+        <br><span class="muted">Scanned an earlier code that doesn't work? Delete that STA entry in the app and scan this one.</span></li>
       <li>Enter the 6-digit code the app shows below.</li>
     </ol>
   </div>
@@ -48,6 +49,7 @@
   const nextParam = new URLSearchParams(location.search).get('next') || '';
   const next = /^[a-z-]+\.html(\?[\w=&%-]*)?$/.test(nextParam) ? nextParam : 'developer.html';
   let factorId = null;
+  const SETUP_KEY = 'sta-two-step-setup';
 
   async function start() {
     if (!(await STA.initPage())) return;
@@ -62,15 +64,24 @@
       factorId = verified.id;
       $('ask').hidden = false;
     } else {
-      // Clear any half-finished setup, then start a new one.
-      for (const f of (data.all || []).filter(f => f.status !== 'verified')) {
-        await client.auth.mfa.unenroll({ factorId: f.id });
+      // Keep showing the same code while setup is unfinished (e.g. after a
+      // reload), so a code already scanned keeps working. The code is kept in
+      // this browser tab only.
+      const session = (await client.auth.getSession()).data.session;
+      let setup = null;
+      try { setup = JSON.parse(sessionStorage.getItem(SETUP_KEY) || 'null'); } catch (_) { /* storage blocked */ }
+      const unfinished = (data.all || []).filter(f => f.status !== 'verified');
+      if (!setup || setup.user !== session.user.id || !unfinished.some(f => f.id === setup.factorId)) {
+        // Start a new setup, clearing any half-finished one.
+        for (const f of unfinished) await client.auth.mfa.unenroll({ factorId: f.id });
+        const { data: en, error: enErr } = await client.auth.mfa.enroll({ factorType: 'totp', friendlyName: 'STA developer' });
+        if (enErr) throw enErr;
+        setup = { user: session.user.id, factorId: en.id, qr: en.totp.qr_code, secret: en.totp.secret };
+        try { sessionStorage.setItem(SETUP_KEY, JSON.stringify(setup)); } catch (_) { /* storage blocked */ }
       }
-      const { data: en, error: enErr } = await client.auth.mfa.enroll({ factorType: 'totp', friendlyName: 'STA developer' });
-      if (enErr) throw enErr;
-      factorId = en.id;
-      $('qr').src = en.totp.qr_code;
-      $('secret').textContent = en.totp.secret;
+      factorId = setup.factorId;
+      $('qr').src = setup.qr;
+      $('secret').textContent = setup.secret;
       $('setup').hidden = false;
     }
     $('codeForm').hidden = false;
@@ -87,6 +98,7 @@
       showMessage($('msg'), 'That code didn\'t work. Check the app and enter the newest code.');
       return;
     }
+    try { sessionStorage.removeItem(SETUP_KEY); } catch (_) { /* storage blocked */ }
     location.replace(next);
   });
 
