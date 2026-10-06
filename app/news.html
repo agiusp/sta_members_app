@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>News</title>
+<link rel="stylesheet" href="styles.css">
+<style>
+  .post { border-top: 1px solid #eceef1; padding: 16px 0; }
+  .post:first-child { border-top: none; padding-top: 4px; }
+  .post h2 { margin-bottom: 2px; }
+  .post-meta { font-size: 12px; color: var(--muted); margin-bottom: 10px; }
+  .post-body { white-space: pre-wrap; font-size: 15px; line-height: 1.5; overflow-wrap: anywhere; }
+  .post-body a { color: var(--accent); }
+  .post-actions { display: flex; gap: 8px; margin-top: 10px; }
+  .post-actions button { min-height: 32px; padding: 5px 12px; font-size: 13px; }
+  #postForm textarea {
+    width: 100%; min-height: 140px; font: inherit; font-size: 14px; padding: 8px 9px;
+    border: 1px solid #cbd2d9; border-radius: 6px; color: var(--ink);
+  }
+  #postForm input { width: 100%; }
+</style>
+</head>
+<body data-page="News" data-section="news">
+
+<main class="page">
+<!-- Developers only: post or edit an announcement -->
+<section class="panel" id="postPanel" hidden>
+  <div class="panel-title" id="postTitle">Post news (developers)</div>
+  <form id="postForm" class="stack" style="max-width:none">
+    <label>Title <input id="postTitleInput" maxlength="120" required></label>
+    <label>Text (links starting with https:// become clickable)
+      <textarea id="postBody" maxlength="5000" required></textarea></label>
+    <div class="row">
+      <button type="submit" id="postSaveBtn">Post</button>
+      <button type="button" class="secondary" id="postCancelBtn" hidden>Cancel editing</button>
+    </div>
+  </form>
+  <div id="postMsg"></div>
+</section>
+
+<section class="panel">
+  <div id="posts"><p class="muted">Loading…</p></div>
+  <div id="msg"></div>
+  <p class="muted" id="websiteNote" hidden></p>
+</section>
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/dist/umd/supabase.js"
+        integrity="sha384-Rj26LVGvoeRVR6+mwQmFfcR3QOBEwT+ZmuCWpuiqeTzJpCs0ER4ITAWGb4Hiy3Ok"
+        crossorigin="anonymous"></script>
+<script src="config.js"></script>
+<script src="common.js"></script>
+<script>
+(function () {
+  const { esc, rpc, fmtDateTime, showMessage } = STA;
+  const $ = id => document.getElementById(id);
+  let posts = [];
+  let editingId = null;
+
+  // Escapes the text, then turns https:// addresses into links.
+  function linkify(text) {
+    return esc(text).replace(/https:\/\/[^\s<]+[^\s<.,;:!?)'"]/g,
+      url => `<a href="${url}" target="_blank" rel="noopener">${url}</a>`);
+  }
+
+  async function start() {
+    if (!(await STA.initPage())) return;
+    const brand = STA.branding();
+    if (brand && brand.website_url) {
+      $('websiteNote').hidden = false;
+      $('websiteNote').innerHTML = `Club events, schedules and membership forms are on the club website:
+        <a href="${esc(brand.website_url)}" target="_blank" rel="noopener">${esc(brand.website_url)}</a>`;
+    }
+    await load();
+  }
+
+  async function load() {
+    let d;
+    try { d = await rpc('news_posts'); }
+    catch (err) {
+      $('posts').innerHTML = '';
+      showMessage($('msg'), err.message === 'Not a member'
+        ? 'This email is not on the active member list. If you think that is a mistake, contact the program organizers.'
+        : 'Could not load the news: ' + err.message);
+      return;
+    }
+    posts = d.posts;
+    $('postPanel').hidden = !d.is_developer;
+    $('posts').innerHTML = posts.length ? posts.map(p => `
+      <article class="post">
+        <h2>${esc(p.title)}</h2>
+        <div class="post-meta">${esc(fmtDateTime(p.created_at))}${p.updated_at ? ` &middot; edited ${esc(fmtDateTime(p.updated_at))}` : ''}</div>
+        <div class="post-body">${linkify(p.body)}</div>
+        ${d.is_developer ? `<div class="post-actions">
+          <button class="secondary" data-edit="${p.id}">Edit</button>
+          <button class="danger" data-delete="${p.id}">Delete</button></div>` : ''}
+      </article>`).join('')
+      : '<p class="muted">No news yet. Check back soon.</p>';
+  }
+
+  function resetForm() {
+    editingId = null;
+    $('postForm').reset();
+    $('postTitle').textContent = 'Post news (developers)';
+    $('postSaveBtn').textContent = 'Post';
+    $('postCancelBtn').hidden = true;
+  }
+
+  $('posts').addEventListener('click', async e => {
+    const edit = e.target.closest('button[data-edit]');
+    const del = e.target.closest('button[data-delete]');
+    showMessage($('msg'), '');
+    if (edit) {
+      const p = posts.find(x => x.id === Number(edit.dataset.edit));
+      editingId = p.id;
+      $('postTitleInput').value = p.title;
+      $('postBody').value = p.body;
+      $('postTitle').textContent = 'Edit news post';
+      $('postSaveBtn').textContent = 'Save changes';
+      $('postCancelBtn').hidden = false;
+      $('postPanel').scrollIntoView({ behavior: 'smooth' });
+    }
+    if (del) {
+      // Two clicks to delete (no pop-up): the first click asks for confirmation.
+      if (del.dataset.confirm !== 'yes') {
+        del.dataset.confirm = 'yes';
+        del.textContent = 'Click again to delete';
+        return;
+      }
+      try { await rpc('dev_delete_news', { p_id: Number(del.dataset.delete) }); }
+      catch (err) { showMessage($('msg'), err.message); }
+      if (editingId === Number(del.dataset.delete)) resetForm();
+      await load();
+    }
+  });
+
+  $('postForm').addEventListener('submit', async e => {
+    e.preventDefault();
+    showMessage($('postMsg'), '');
+    try {
+      await rpc('dev_save_news', { p_id: editingId, p_title: $('postTitleInput').value, p_body: $('postBody').value });
+      showMessage($('postMsg'), editingId ? 'Post updated.' : 'Posted. Members see it on the News page.', 'ok');
+      resetForm();
+      await load();
+    } catch (err) { showMessage($('postMsg'), err.message); }
+  });
+
+  $('postCancelBtn').addEventListener('click', () => { resetForm(); showMessage($('postMsg'), ''); });
+
+  start().catch(err => showMessage($('msg'), err.message));
+})();
+</script>
+</body>
+</html>

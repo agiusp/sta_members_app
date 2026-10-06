@@ -3,27 +3,16 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>STA Sunday Program</title>
+<title>Member sign-in</title>
 <link rel="stylesheet" href="styles.css">
 </head>
-<body>
+<body data-page="Member sign-in" data-section="signin">
 
-<header>
-  <h1>STA Sunday Program</h1>
-  <div class="who" id="who" hidden>
-    <span id="whoEmail"></span>
-    <a href="courts.html">Designated Courts</a>
-    <a href="review.html">Review my Game</a>
-    <a href="developer.html" id="devLink" hidden>Developer area</a>
-    <button class="secondary" id="signOutBtn">Sign out</button>
-  </div>
-</header>
-
-<div class="test-banner" id="testBanner" hidden></div>
-
+<main class="page">
 <!-- Sign in -->
 <section class="panel" id="signInView" hidden>
-  <div class="panel-title">Sign in</div>
+  <h1 style="margin-bottom:6px">Member sign-in</h1>
+  <p class="muted" style="margin-top:0">Welcome to <span class="program-name">the members app</span>: club news, Sunday Doubles sign-ups, court assignments and more.</p>
   <form class="stack" id="signInForm">
     <label>Email <input type="email" id="signInEmail" autocomplete="email" required></label>
     <label>Password <input type="password" id="signInPassword" autocomplete="current-password" required></label>
@@ -31,12 +20,12 @@
     <a class="link-button" id="forgotLink">Forgot password?</a>
   </form>
   <div id="signInMsg"></div>
-  <p class="muted">Accounts are for STA Sunday Program members only. New members receive an invite email to set their password.</p>
+  <p class="muted">Accounts are for club members only. New members receive an invite email to set their password.</p>
 </section>
 
 <!-- Set password (after an invite or password-reset link) -->
 <section class="panel" id="setPasswordView" hidden>
-  <div class="panel-title" id="setPasswordTitle">Set your password</div>
+  <h2 id="setPasswordTitle">Set your password</h2>
   <form class="stack" id="setPasswordForm">
     <label>New password (at least 10 characters)
       <input type="password" id="newPassword" autocomplete="new-password" minlength="10" required></label>
@@ -46,12 +35,7 @@
   </form>
   <div id="setPasswordMsg"></div>
 </section>
-
-<!-- This week's sign-up -->
-<section class="panel" id="weekView" hidden>
-  <div id="weekBody"></div>
-  <div id="weekMsg"></div>
-</section>
+</main>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/dist/umd/supabase.js"
         integrity="sha384-Rj26LVGvoeRVR6+mwQmFfcR3QOBEwT+ZmuCWpuiqeTzJpCs0ER4ITAWGb4Hiy3Ok"
@@ -60,27 +44,31 @@
 <script src="common.js"></script>
 <script>
 (function () {
-  const { client, esc, rpc, fmtDateTime, fmtPlayDate, showMessage } = STA;
+  const { client, showMessage } = STA;
   const $ = id => document.getElementById(id);
-  const views = ['signInView', 'setPasswordView', 'weekView'];
-  let busy = false;
+  const views = ['signInView', 'setPasswordView'];
 
   function show(view) {
     views.forEach(v => { $(v).hidden = v !== view; });
   }
 
+  // Where to go once signed in: back to the page that sent the member here
+  // (only pages of this app), otherwise News.
+  function nextPage() {
+    const next = new URLSearchParams(location.search).get('next') || '';
+    return /^[a-z-]+\.html(\?[\w=&%-]*)?$/.test(next) ? next : 'news.html';
+  }
+
   async function start() {
     if (STA.authLinkError) {
+      await STA.initPage({ requireSignIn: false });
       show('signInView');
       showMessage($('signInMsg'), `That link didn't work (${STA.authLinkError}). Email links work once and expire after 24 hours. If this was an invite, ask a developer to resend it. If you already have a password, sign in below or use "Forgot password?".`);
       history.replaceState(null, '', location.pathname);
       return;
     }
-    const { data: { session } } = await client.auth.getSession();
-    if (!session) { $('who').hidden = true; show('signInView'); return; }
-
-    $('who').hidden = false;
-    $('whoEmail').textContent = session.user.email;
+    const session = await STA.initPage({ requireSignIn: false });
+    if (!session) { show('signInView'); return; }
     if (STA.authLinkType === 'invite' || STA.authLinkType === 'recovery') {
       $('setPasswordTitle').textContent =
         STA.authLinkType === 'invite' ? 'Welcome! Set your password' : 'Choose a new password';
@@ -88,89 +76,8 @@
       show('setPasswordView');
       return;
     }
-    await loadWeek();
+    location.replace(nextPage());
   }
-
-  async function loadWeek() {
-    show('weekView');
-    let week;
-    try {
-      week = await rpc('my_week');
-    } catch (err) {
-      $('weekBody').innerHTML = '';
-      showMessage($('weekMsg'), err.message === 'Not a member'
-        ? 'This email is not on the active member list. If you think that is a mistake, contact the program organizers.'
-        : 'Could not load this week: ' + err.message);
-      return;
-    }
-    $('devLink').hidden = !week.is_developer;
-    $('testBanner').hidden = !week.test_mode;
-    $('testBanner').textContent = week.test_mode
-      ? `Test mode: the app is pretending it's ${fmtDateTime(week.now)}.`
-      : '';
-    renderWeek(week);
-  }
-
-  function renderWeek(week) {
-    const s = week.session;
-    if (week.phase === 'none' || !s) {
-      $('weekBody').innerHTML = '<h2>No Sunday session scheduled</h2><p class="muted">Check back later in the week.</p>';
-      return;
-    }
-    const contacts = (week.contact_emails || [])
-      .map(e => `<a href="mailto:${esc(e)}">${esc(e)}</a>`).join(' and/or ');
-    const deadline = {
-      not_open: `Sign-ups open <strong>${esc(fmtDateTime(s.signups_open_at))}</strong>.`,
-      open: `Sign up or cancel until <strong>${esc(fmtDateTime(s.signups_close_at))}</strong>.`,
-      closed: `Sign-ups are closed. Court and ball assignments go out by email by ${esc(fmtDateTime(s.courts_publish_at))}.
-               Can't play after all? It's your responsibility to find a replacement from the waitlist or your own contacts${
-               contacts ? `, and to let ${contacts} know` : ''}.`
-    }[week.phase];
-
-    const open = week.phase === 'open';
-    const lapsed = week.membership_current === false;
-    const rows = week.players.map(p => {
-      const badge = !p.signed_up ? '<span class="badge none">Not signed up</span>'
-        : p.has_spot ? '<span class="badge spot">Has a spot</span>'
-        : `<span class="badge wait">Waitlist #${p.waitlist_place}</span>`;
-      const btn = p.signed_up
-        ? `<button class="danger" data-action="cancel" data-player="${p.id}" ${open ? '' : 'disabled'}>Cancel</button>`
-        : `<button data-action="signup" data-player="${p.id}" ${open && !lapsed ? '' : 'disabled'}>Sign up</button>`;
-      return `<div class="player-row">
-        <div><span class="player-name">${esc(p.first_name)} ${esc(p.last_name)}</span>${badge}</div>
-        ${btn}
-      </div>`;
-    }).join('');
-
-    $('weekBody').innerHTML = `
-      <h2>${esc(fmtPlayDate(s.play_date))}</h2>
-      <div class="stats">
-        <span><strong>${s.num_courts}</strong> courts</span>
-        <span><strong>${s.filled}</strong> of ${s.capacity} spots filled</span>
-        <span><strong>${s.waitlist}</strong> on the waitlist</span>
-      </div>
-      <div class="deadline">${deadline}</div>
-      ${lapsed ? `<div class="msg error" style="margin-bottom:14px">${esc(week.dues_message)}</div>` : ''}
-      ${rows || '<p class="muted">No players are linked to your account yet.</p>'}
-      ${week.players.length > 1 ? '<p class="muted">Everyone linked to your account is listed, so you can sign up family members too.</p>' : ''}
-    `;
-  }
-
-  $('weekBody').addEventListener('click', async e => {
-    const btn = e.target.closest('button[data-action]');
-    if (!btn || busy) return;
-    busy = true;
-    btn.disabled = true;
-    showMessage($('weekMsg'), '');
-    try {
-      const playerId = Number(btn.dataset.player);
-      await rpc(btn.dataset.action === 'signup' ? 'sign_up' : 'cancel_signup', { p_player_id: playerId });
-    } catch (err) {
-      showMessage($('weekMsg'), err.message);
-    }
-    busy = false;
-    await loadWeek();
-  });
 
   $('signInForm').addEventListener('submit', async e => {
     e.preventDefault();
@@ -184,7 +91,7 @@
       showMessage($('signInMsg'), 'Email or password is incorrect.');
       return;
     }
-    start();
+    location.replace(nextPage());
   });
 
   $('forgotLink').addEventListener('click', async () => {
@@ -201,16 +108,11 @@
     if (pw !== $('newPassword2').value) { showMessage($('setPasswordMsg'), 'The two passwords do not match.'); return; }
     const { error } = await client.auth.updateUser({ password: pw });
     if (error) { showMessage($('setPasswordMsg'), error.message); return; }
-    await loadWeek();
-  });
-
-  $('signOutBtn').addEventListener('click', async () => {
-    await client.auth.signOut();
-    location.reload();
+    location.replace(nextPage());
   });
 
   STA.addPasswordToggles();
-  start();
+  start().catch(err => { show('signInView'); showMessage($('signInMsg'), err.message); });
 })();
 </script>
 </body>

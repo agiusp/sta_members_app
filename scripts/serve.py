@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Local web server for the app pages (http://127.0.0.1:3000/app/).
+"""Local web server for the app pages (http://127.0.0.1:3000/app/, or PORT).
 
 Same as `python3 -m http.server`, but tells the browser not to cache, so
 page changes show up on a normal reload. Local development only.
@@ -16,5 +16,6 @@ class NoCacheHandler(http.server.SimpleHTTPRequestHandler):
 if __name__ == '__main__':
     root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     handler = functools.partial(NoCacheHandler, directory=root)
-    print('Serving on http://127.0.0.1:3000/app/  (Ctrl+C to stop)')
-    http.server.ThreadingHTTPServer(('127.0.0.1', 3000), handler).serve_forever()
+    port = int(os.environ.get('PORT', '3000'))
+    print(f'Serving on http://127.0.0.1:{port}/app/  (Ctrl+C to stop)')
+    http.server.ThreadingHTTPServer(('127.0.0.1', port), handler).serve_forever()

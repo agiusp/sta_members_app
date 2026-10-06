@@ -109,7 +109,15 @@ export async function bootstrapDeveloper() {
     return { status: out.includes('"id"') ? 200 : 504, data: out };
   });
   assert.equal(r.status, 200, r.data);
+  await setTwoStep(false);
   return acceptInvite('dev@example.com', PW);
+}
+
+// Two-step sign-in for developers is on by default; most tests switch it off
+// (tests/twostep.test.mjs covers it). Only the database itself can change it.
+async function setTwoStep(on) {
+  const r = await call('/rest/v1/settings?id=eq.true', { token: SERVICE_KEY, key: SERVICE_KEY, method: 'PATCH', body: { dev_two_step: on } });
+  assert.ok(r.status < 300, JSON.stringify(r.data));
 }
 
 export function summary() {
@@ -117,4 +125,4 @@ export function summary() {
 }
 
 export { assert, execSync, API, MAIL, PUBLIC_KEY, SERVICE_KEY, APP_URL, check, call, rpc, rpcOk, rpcFails,
-         acceptInvite, signIn, retryOnTimeout, inviteAsDeveloper };
+         acceptInvite, signIn, retryOnTimeout, inviteAsDeveloper, setTwoStep };

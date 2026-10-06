@@ -1,4 +1,4 @@
-// Shared by the member and developer pages.
+// Shared by every page of the app.
 window.STA = (function () {
   const cfg = window.STA_CONFIG;
 
@@ -73,5 +73,191 @@ window.STA = (function () {
     });
   }
 
-  return { client, authLinkType, authLinkError, TZ, fmtDateTime, fmtPlayDate, esc, rpc, showMessage, addPasswordToggles };
+  // ---------- Site header: logo, app name, navigation ----------
+  // Every page has the same header. A page says where it belongs with
+  // <body data-section="sunday" data-tab="courts">, and calls STA.initPage().
+  const DEFAULT_LOGO = 'img/sta-logo.png';
+  const SECTIONS = [
+    { key: 'news', label: 'News', href: 'news.html' },
+    { key: 'sunday', label: 'Sunday Doubles', href: 'signup.html', tabs: [
+      { key: 'signup', label: 'Sign-up', href: 'signup.html' },
+      { key: 'courts', label: 'Court Assignments', href: 'courts.html' },
+      { key: 'review', label: 'Game Review', href: 'review.html' }] },
+    { key: 'casual', label: 'Casual Play', href: 'casual.html' },
+    { key: 'dev', label: 'Developers', href: 'developer.html', devOnly: true, tabs: [
+      { key: 'overview', label: 'Members and this week', href: 'developer.html' },
+      { key: 'scheduler', label: 'Scheduler', href: 'scheduler.html' },
+      { key: 'emails', label: 'Emails, schedule and settings', href: 'emails.html' }] }
+  ];
+  const BRAND_CACHE = 'sta-branding';
+  const DEV_CACHE = 'sta-is-developer';
+  let brand = null;
+  let who = null;        // signed-in email, or null
+  let isDev = false;
+
+  // "STA - STA Members App" shows as "STA" with "STA Members App" under it.
+  function splitName(name) {
+    const i = name.indexOf(' - ');
+    return i > 0 ? [name.slice(0, i), name.slice(i + 3)] : [name, ''];
+  }
+
+  function websiteLabel(url) {
+    try { return new URL(url).hostname.replace(/^www\./, ''); } catch (_) { return 'Club website'; }
+  }
+
+  function renderHeader() {
+    const b = brand || { program_name: 'STA - STA Members App', brand_color: '#372a7b', logo: null,
+                         website_url: 'https://www.statennis.com/' };
+    const section = document.body.dataset.section;
+    const tab = document.body.dataset.tab;
+    const [name, sub] = splitName(b.program_name);
+    document.documentElement.style.setProperty('--accent', b.brand_color);
+
+    let header = document.getElementById('siteHeader');
+    if (!header) {
+      header = document.createElement('header');
+      header.id = 'siteHeader';
+      header.className = 'site-header';
+      document.body.insertBefore(header, document.body.firstChild);
+    }
+    let links = who ? SECTIONS.filter(s => !s.devOnly || isDev).map(s =>
+      `<a href="${s.href}"${s.key === section ? ' class="active" aria-current="page"' : ''}>${esc(s.label)}</a>`).join('') : '';
+    if (who && b.demo) links += `<a href="demo-inbox.html"${section === 'demo' ? ' class="active" aria-current="page"' : ''}>Demo inbox</a>`;
+    const demoStrip = b.demo
+      ? '<div class="demo-strip"><div class="site-inner">Demo version: all players and club data are made up. Emails are not sent; they appear in the Demo inbox.</div></div>' : '';
+    const website = b.website_url
+      ? `<a class="site-ext" href="${esc(b.website_url)}" target="_blank" rel="noopener">${esc(websiteLabel(b.website_url))} &#8599;</a>` : '';
+    header.innerHTML = `
+      <div class="site-inner site-top">
+        <a class="site-brand" href="${who ? 'news.html' : './'}">
+          <img src="${esc(b.logo || DEFAULT_LOGO)}" alt="">
+          <span class="site-name"><span class="brand-name">${esc(name)}</span>${sub ? `<span class="brand-sub">${esc(sub)}</span>` : ''}</span>
+        </a>
+        ${who ? `<div class="site-user"><span>${esc(who)}</span><button class="secondary" id="siteSignOut">Sign out</button></div>` : ''}
+      </div>
+      <nav class="site-nav" aria-label="Main"><div class="site-inner">${links}${website}</div></nav>${demoStrip}`;
+    const out = document.getElementById('siteSignOut');
+    if (out) out.addEventListener('click', signOut);
+
+    // Section title and its tabs, at the top of the page content.
+    const s = SECTIONS.find(x => x.key === section);
+    const main = document.querySelector('main.page');
+    let head = document.getElementById('sectionHead');
+    if (s && main) {
+      if (!head) {
+        head = document.createElement('div');
+        head.id = 'sectionHead';
+        head.className = 'section-head';
+        main.insertBefore(head, main.firstChild);
+      }
+      head.innerHTML = `<h1>${esc(s.label)}</h1>` + (s.tabs ? `<nav class="tabs" aria-label="${esc(s.label)}">${s.tabs.map(t =>
+        `<a href="${t.href}"${t.key === tab ? ' class="active" aria-current="page"' : ''}>${esc(t.label)}</a>`).join('')}</nav>` : '');
+    }
+
+    document.querySelectorAll('.program-name').forEach(el => { el.textContent = b.program_name; });
+    const page = document.body.dataset.page;
+    document.title = page ? `${page} · ${name}` : name;
+  }
+
+  function showBranding(b) {
+    if (!b) return;
+    brand = b;
+    renderHeader();
+  }
+
+  async function applyBranding() {
+    try { showBranding(JSON.parse(localStorage.getItem(BRAND_CACHE))); } catch (_) { /* no cache */ }
+    const { data, error } = await client.rpc('branding');
+    if (error || !data) return null;
+    showBranding(data);
+    try { localStorage.setItem(BRAND_CACHE, JSON.stringify(data)); } catch (_) { /* storage blocked */ }
+    return data;
+  }
+
+  async function signOut() {
+    try { sessionStorage.removeItem(DEV_CACHE); } catch (_) { /* storage blocked */ }
+    await client.auth.signOut();
+    location.href = './';
+  }
+
+  // Draws the header and checks sign-in. Pages for members only send visitors
+  // who aren't signed in to the sign-in page, which brings them back after.
+  // Returns the session, or null.
+  async function initPage({ requireSignIn = true } = {}) {
+    renderHeader();
+    const branding = applyBranding();
+    const { data: { session } } = await client.auth.getSession();
+    if (!session) {
+      if (requireSignIn) {
+        const here = location.pathname.split('/').pop();
+        location.replace('./' + (here ? '?next=' + encodeURIComponent(here + location.search) : ''));
+      }
+      await branding;
+      return null;
+    }
+    who = session.user.email;
+    // The Developers tab is only a shortcut: the database itself decides who
+    // can do what. Remembered for this browser tab so it doesn't flicker.
+    try { isDev = sessionStorage.getItem(DEV_CACHE) === session.user.id; } catch (_) { /* storage blocked */ }
+    renderHeader();
+    const devCheck = client.rpc('my_developer').then(({ data }) => {
+      isDev = !!(data && data.developer);
+      try { isDev ? sessionStorage.setItem(DEV_CACHE, session.user.id) : sessionStorage.removeItem(DEV_CACHE); } catch (_) { /* storage blocked */ }
+      renderHeader();
+      return data || {};
+    });
+    // Developer pages need a sign-in confirmed with a code from an
+    // authenticator app (two-step sign-in); ask for it first.
+    if (document.body.dataset.section === 'dev') {
+      const me = await devCheck;
+      if (me.developer && !me.confirmed) {
+        const here = location.pathname.split('/').pop();
+        location.replace('two-step.html?next=' + encodeURIComponent(here + location.search));
+        return null;
+      }
+    }
+    await branding;
+    return session;
+  }
+
+  // Shows the amber test-mode banner when the app is on the test clock.
+  function showTestClock(el, testMode, now) {
+    el.hidden = !testMode;
+    el.textContent = testMode ? `Test mode: the app is pretending it's ${fmtDateTime(now)}.` : '';
+  }
+
+  // Reads a CSV/TSV (quoted fields allowed) into rows of cells.
+  function parseDelimited(text) {
+    text = text.replace(/^\uFEFF/, '');
+    const firstLine = text.split(/\r?\n/, 1)[0];
+    const sep = firstLine.includes('\t') ? '\t' : firstLine.includes(';') && !firstLine.includes(',') ? ';' : ',';
+    const rows = [];
+    let row = [], cell = '', quoted = false;
+    for (let i = 0; i < text.length; i++) {
+      const c = text[i];
+      if (quoted) {
+        if (c === '"' && text[i + 1] === '"') { cell += '"'; i++; }
+        else if (c === '"') quoted = false;
+        else cell += c;
+      } else if (c === '"') quoted = true;
+      else if (c === sep) { row.push(cell); cell = ''; }
+      else if (c === '\n' || c === '\r') {
+        if (c === '\r' && text[i + 1] === '\n') i++;
+        row.push(cell); rows.push(row); row = []; cell = '';
+      } else cell += c;
+    }
+    if (cell || row.length) { row.push(cell); rows.push(row); }
+    return rows.map(r => r.map(x => x.trim())).filter(r => r.some(x => x));
+  }
+
+  // WCAG contrast ratio of white text on a background color (#rrggbb).
+  function contrastWithWhite(hex) {
+    const lin = c => { c /= 255; return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4; };
+    const [r, g, b] = [1, 3, 5].map(i => lin(parseInt(hex.slice(i, i + 2), 16)));
+    return 1.05 / (0.2126 * r + 0.7152 * g + 0.0722 * b + 0.05);
+  }
+
+  return { client, authLinkType, authLinkError, TZ, fmtDateTime, fmtPlayDate, esc, rpc, showMessage,
+           addPasswordToggles, parseDelimited, applyBranding, showBranding, branding: () => brand, initPage, signOut, showTestClock, splitName,
+           contrastWithWhite, DEFAULT_LOGO };
 })();

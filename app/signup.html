@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sign-up</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body data-page="Sunday Doubles sign-up" data-section="sunday" data-tab="signup">
+
+<main class="page">
+<div class="test-banner" id="testBanner" hidden></div>
+
+<!-- This week's sign-up -->
+<section class="panel" id="weekView">
+  <div id="weekBody"><p class="muted">Loading…</p></div>
+  <div id="weekMsg"></div>
+</section>
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/dist/umd/supabase.js"
+        integrity="sha384-Rj26LVGvoeRVR6+mwQmFfcR3QOBEwT+ZmuCWpuiqeTzJpCs0ER4ITAWGb4Hiy3Ok"
+        crossorigin="anonymous"></script>
+<script src="config.js"></script>
+<script src="common.js"></script>
+<script>
+(function () {
+  const { esc, rpc, fmtDateTime, fmtPlayDate, showMessage } = STA;
+  const $ = id => document.getElementById(id);
+  let busy = false;
+
+  async function start() {
+    if (!(await STA.initPage())) return;
+    await loadWeek();
+  }
+
+  async function loadWeek() {
+    let week;
+    try {
+      week = await rpc('my_week');
+    } catch (err) {
+      $('weekBody').innerHTML = '';
+      showMessage($('weekMsg'), err.message === 'Not a member'
+        ? 'This email is not on the active member list. If you think that is a mistake, contact the program organizers.'
+        : 'Could not load this week: ' + err.message);
+      return;
+    }
+    STA.showTestClock($('testBanner'), week.test_mode, week.now);
+    renderWeek(week);
+  }
+
+  function renderWeek(week) {
+    const s = week.session;
+    if (week.phase === 'none' || !s) {
+      $('weekBody').innerHTML = '<h2>No Sunday session scheduled</h2><p class="muted">Check back later in the week.</p>';
+      return;
+    }
+    const contacts = (week.contact_emails || [])
+      .map(e => `<a href="mailto:${esc(e)}">${esc(e)}</a>`).join(' and/or ');
+    const deadline = {
+      not_open: `Sign-ups open <strong>${esc(fmtDateTime(s.signups_open_at))}</strong>.`,
+      open: `Sign up or cancel until <strong>${esc(fmtDateTime(s.signups_close_at))}</strong>.`,
+      closed: `Sign-ups are closed. Court and ball assignments go out by email by ${esc(fmtDateTime(s.courts_publish_at))}.
+               Can't play after all? It's your responsibility to find a replacement from the waitlist or your own contacts${
+               contacts ? `, and to let ${contacts} know` : ''}.`
+    }[week.phase];
+
+    const open = week.phase === 'open';
+    const lapsed = week.membership_current === false;
+    const rows = week.players.map(p => {
+      const badge = !p.signed_up ? '<span class="badge none">Not signed up</span>'
+        : p.has_spot ? '<span class="badge spot">Has a spot</span>'
+        : `<span class="badge wait">Waitlist #${p.waitlist_place}</span>`;
+      const btn = p.signed_up
+        ? `<button class="danger" data-action="cancel" data-player="${p.id}" ${open ? '' : 'disabled'}>Cancel</button>`
+        : `<button data-action="signup" data-player="${p.id}" ${open && !lapsed ? '' : 'disabled'}>Sign up</button>`;
+      return `<div class="player-row">
+        <div><span class="player-name">${esc(p.first_name)} ${esc(p.last_name)}</span>${badge}</div>
+        ${btn}
+      </div>`;
+    }).join('');
+
+    $('weekBody').innerHTML = `
+      <h2>${esc(fmtPlayDate(s.play_date))}</h2>
+      <div class="stats">
+        <span><strong>${s.num_courts}</strong> courts</span>
+        <span><strong>${s.filled}</strong> of ${s.capacity} spots filled</span>
+        <span><strong>${s.waitlist}</strong> on the waitlist</span>
+      </div>
+      <div class="deadline">${deadline}</div>
+      ${lapsed ? `<div class="msg error" style="margin-bottom:14px">${esc(week.dues_message)}</div>` : ''}
+      ${rows || '<p class="muted">No players are linked to your account yet.</p>'}
+      ${week.players.length > 1 ? '<p class="muted">Everyone linked to your account is listed, so you can sign up family members too.</p>' : ''}
+    `;
+  }
+
+  $('weekBody').addEventListener('click', async e => {
+    const btn = e.target.closest('button[data-action]');
+    if (!btn || busy) return;
+    busy = true;
+    btn.disabled = true;
+    showMessage($('weekMsg'), '');
+    try {
+      const playerId = Number(btn.dataset.player);
+      await rpc(btn.dataset.action === 'signup' ? 'sign_up' : 'cancel_signup', { p_player_id: playerId });
+    } catch (err) {
+      showMessage($('weekMsg'), err.message);
+    }
+    busy = false;
+    await loadWeek();
+  });
+
+  start().catch(err => showMessage($('weekMsg'), err.message));
+})();
+</script>
+</body>
+</html>

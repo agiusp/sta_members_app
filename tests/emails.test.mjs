@@ -25,7 +25,7 @@ await check('the setup-invite uses the app wording, names the linked players, an
   await clearInbox();
   assert.equal((await inviteAsDeveloper(dev, 'yara.green@example.com')).status, 200);
   const [mail] = await inbox();
-  assert.equal(mail.subject, 'Your invitation to the STA Sunday Program sign-up app');
+  assert.equal(mail.subject, 'Your invitation to STA - STA Members App');
   const body = await text(mail.id);
   assert.match(body, /^Hello Yara Green and Zack Baker,/);
   assert.match(body, /expires after 24 hours/);
@@ -59,7 +59,7 @@ await check('members cannot read or change email wording or the schedule', async
 await check('the Emails page gets every email with its wording, and the schedule', async () => {
   const r = await call('/functions/v1/email-admin', { token: dev, body: {} });
   assert.equal(r.status, 200, JSON.stringify(r.data));
-  assert.equal(r.data.emails.length, 14);
+  assert.equal(r.data.emails.length, 16);
   assert.ok(r.data.emails.every(e => e.subject && e.body && e.sent && e.to && e.edited === null));
   assert.equal(r.data.schedule.length, 10);
 });
@@ -81,6 +81,7 @@ await check('when sign-ups open, the play-invite goes once to current members wh
   const mail = await inbox();
   assert.deepEqual(mail.map(m => m.to).sort(), ['alice.johnson@example.com', 'dev@example.com', 'yara.green@example.com']);
   assert.match(mail[0].subject, /^Custom: sign up for October \d+/);
+  assert.match(await text(mail[0].id), /^Sign up: \S+\/app\/signup\.html$/m, 'links to the Sunday Doubles sign-up tab');
   await call('/rest/v1/email_templates?key=eq.play_invite', { token: dev, method: 'DELETE' });
 });
 

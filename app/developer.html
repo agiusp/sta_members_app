@@ -3,22 +3,18 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>STA Developer Area</title>
+<title>Developers</title>
 <link rel="stylesheet" href="styles.css">
+<style>
+  .upload-box { border: 1px dashed #cbd2d9; border-radius: 8px; padding: 12px 14px; margin: 4px 0 16px; background: #fbfbfc; }
+  .upload-box details { margin-top: 8px; font-size: 13px; }
+  .upload-box summary { cursor: pointer; font-weight: 600; }
+  .upload-box ul { margin: 6px 0 0; padding-left: 20px; max-height: 220px; overflow-y: auto; }
+</style>
 </head>
-<body>
+<body data-page="Developers" data-section="dev" data-tab="overview">
 
-<header>
-  <h1>Developer area</h1>
-  <div class="who">
-    <span id="whoEmail"></span>
-    <a href="scheduler.html">Scheduler</a>
-    <a href="emails.html">Emails and schedule</a>
-    <a href="./">Member page</a>
-    <button class="secondary" id="signOutBtn">Sign out</button>
-  </div>
-</header>
-
+<main class="page">
 <div id="guardMsg"></div>
 
 <div id="devContent" hidden>
@@ -40,7 +36,7 @@
     </div>
     <div class="row" style="margin-top:14px">
       <button class="secondary" id="runTasksBtn">Run timed tasks now</button>
-      <span class="muted">Online, these run automatically every few minutes: the Monday play-invite, "off the waitlist" emails, the Saturday developer emails and the player emails, at the times set in Emails and schedule. Emails land in the test inbox.</span>
+      <span class="muted">Online, these run automatically every minute: the Monday play-invite, "off the waitlist" emails, the Saturday developer emails and the player emails, at the times set in Emails, schedule and settings, plus Casual Play game emails. Emails land in the test inbox.</span>
     </div>
     <p class="muted">Simulated players sign up one minute apart, ending at the test clock's time. Sign-ups must be open on the test clock.</p>
     <div id="clockMsg"></div>
@@ -87,6 +83,14 @@
     <div class="panel-title">Members</div>
     <p class="muted">Add a player to a new email, or to an existing email to link a family member. Then send the setup-invite so they can set a password.
       Members stay on this list once they have an account. Mark a member <em>lapsed</em> if they haven't renewed: they keep their account but can't sign up until they're marked current again.</p>
+    <div class="upload-box">
+      <div class="panel-title" style="margin-bottom:4px">Upload current members</div>
+      <p class="muted" style="margin-top:0">Upload the club's list of current members as a CSV or TSV file (in Excel or Google Sheets: File &gt; Download/Save as CSV).
+        It needs an Email column and/or First and Last name columns, like the membership export. Members in the file are marked <em>current</em>;
+        everyone else is marked <em>lapsed</em>. You'll see exactly what will change before anything is saved.</p>
+      <input type="file" id="memberFile" accept=".csv,.tsv,.txt,text/csv,text/tab-separated-values">
+      <div id="uploadPreview"></div>
+    </div>
     <form id="addForm" class="row">
       <label>Email <input type="email" id="addEmail" required></label>
       <label>First name <input id="addFirst" required></label>
@@ -116,6 +120,7 @@
     <div class="table-wrap" id="members" style="margin-top:12px"></div>
   </section>
 </div>
+</main>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/dist/umd/supabase.js"
         integrity="sha384-Rj26LVGvoeRVR6+mwQmFfcR3QOBEwT+ZmuCWpuiqeTzJpCs0ER4ITAWGb4Hiy3Ok"
@@ -129,9 +134,7 @@
   let week = null;
 
   async function start() {
-    const { data: { session } } = await client.auth.getSession();
-    if (!session) { location.href = './'; return; }
-    $('whoEmail').textContent = session.user.email;
+    if (!(await STA.initPage())) return;
     if (!(await rpc('is_developer'))) {
       showMessage($('guardMsg'), 'This area is for developers only.');
       return;
@@ -245,7 +248,8 @@
         preview: 'locked summary to developers',
         publish: 'court and no-spot emails to players',
         weather: 'weather email to everyone signed up',
-        not_locked_alert: '8pm "not locked yet" alert'
+        not_locked_alert: '8pm "not locked yet" alert',
+        casual_games: 'Casual Play game emails'
       };
       showMessage($('clockMsg'), data.tasks.length
         ? `Ran: ${data.tasks.map(t => what[t] || t).join(', ')}. Sent ${data.sent} email(s)` +
@@ -354,6 +358,97 @@
 
   $('memberFilter').addEventListener('change', renderMembers);
 
+  // ---------- Upload current members ----------
+  // "Mary-Ann  O'Brien" -> "maryann obrien": ignores case, accents and punctuation.
+  const normName = s => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
+    .replace(/[^a-z ]/g, '').replace(/\s+/g, ' ').trim();
+
+  // People in the file: { email, name, label }.
+  function readMemberList(text) {
+    const rows = STA.parseDelimited(text);
+    if (!rows.length) throw new Error('That file is empty.');
+    const head = rows[0].map(h => h.toLowerCase());
+    const col = re => head.findIndex(h => re.test(h));
+    const email = col(/e-?mail/), first = col(/first/), last = col(/last|surname|family/);
+    const full = first === -1 || last === -1 ? col(/^(full[ ._]?)?name$/) : -1;
+    if (email === -1 && (first === -1 || last === -1) && full === -1) {
+      throw new Error('Could not find an Email column or First and Last name columns in the first row of the file.');
+    }
+    return rows.slice(1).map(r => {
+      const e = email === -1 ? '' : (r[email] || '').toLowerCase();
+      const n = full !== -1 ? r[full] || '' : first !== -1 && last !== -1 ? `${r[first] || ''} ${r[last] || ''}` : '';
+      return { email: /@/.test(e) ? e : '', name: normName(n), label: [n.trim(), e].filter(Boolean).join(' <') + (n.trim() && e ? '>' : '') };
+    }).filter(p => p.email || p.name);
+  }
+
+  let pendingCurrent = null; // emails to mark current, once confirmed
+
+  function accountLabel(a) {
+    const names = a.players.map(p => `${p.first_name} ${p.last_name}`).join(', ');
+    return `${names || a.email}${names ? ` <${a.email}>` : ''}${a.is_developer ? ' (developer)' : ''}`;
+  }
+
+  function previewMemberList(people) {
+    const emails = new Set(people.map(p => p.email).filter(Boolean));
+    const names = new Set(people.map(p => p.name).filter(Boolean));
+    const accounts = memberRows.filter(a => a.active);
+    const inFile = a => emails.has(a.email) || a.players.some(p => names.has(normName(`${p.first_name} ${p.last_name}`)));
+    const current = accounts.filter(inFile);
+    const lapsed = accounts.filter(a => !inFile(a));
+    const known = new Set(accounts.map(a => a.email));
+    const knownNames = new Set(accounts.flatMap(a => a.players.map(p => normName(`${p.first_name} ${p.last_name}`))));
+    const unknown = people.filter(p => !known.has(p.email) && !knownNames.has(p.name));
+    const newlyCurrent = current.filter(a => !a.membership_current);
+    const newlyLapsed = lapsed.filter(a => a.membership_current);
+    const list = (title, arr, open) => arr.length ? `<details ${open ? 'open' : ''}><summary>${esc(title)} (${arr.length})</summary>
+      <ul>${arr.map(x => `<li>${esc(typeof x === 'string' ? x : accountLabel(x))}</li>`).join('')}</ul></details>` : '';
+    pendingCurrent = current.map(a => a.email);
+    $('uploadPreview').innerHTML = `<div class="msg ${current.length ? 'ok' : 'error'}" style="color:var(--ink)">
+        <strong>${people.length}</strong> people in the file. If you apply it:
+        <strong>${current.length}</strong> member account(s) will be current and <strong>${lapsed.length}</strong> lapsed
+        (${newlyCurrent.length} change to current, ${newlyLapsed.length} change to lapsed).
+        ${list('Changing to lapsed', newlyLapsed, true)}
+        ${list('Changing to current', newlyCurrent, true)}
+        ${list('In the file but not in the app (add them below if they should be)', unknown.map(p => p.label), unknown.length <= 15)}
+        ${list('Staying current', current.filter(a => a.membership_current), false)}
+        ${list('Staying lapsed', lapsed.filter(a => !a.membership_current), false)}
+      </div>
+      <div class="row" style="margin-top:10px">
+        <button id="applyListBtn" ${current.length ? '' : 'disabled'}>Apply: ${current.length} current, ${lapsed.length} lapsed</button>
+        <button class="secondary" id="cancelListBtn">Cancel</button>
+      </div>`;
+    if (!current.length) showMessage($('membersMsg'), 'Nobody in the file matches a member in the app by email or name, so it cannot be applied. Check that it is the right file.');
+  }
+
+  $('memberFile').addEventListener('change', async () => {
+    const file = $('memberFile').files[0];
+    showMessage($('membersMsg'), '');
+    $('uploadPreview').innerHTML = '';
+    pendingCurrent = null;
+    if (!file) return;
+    if (/\.xlsx?$/i.test(file.name)) {
+      showMessage($('membersMsg'), 'Please save the spreadsheet as a CSV file first (File > Save as / Download > CSV), then upload that.');
+      return;
+    }
+    try { previewMemberList(readMemberList(await file.text())); }
+    catch (err) { showMessage($('membersMsg'), err.message); }
+  });
+
+  $('uploadPreview').addEventListener('click', async e => {
+    if (e.target.id === 'cancelListBtn') {
+      $('uploadPreview').innerHTML = ''; $('memberFile').value = ''; pendingCurrent = null;
+      return;
+    }
+    if (e.target.id !== 'applyListBtn' || !pendingCurrent) return;
+    e.target.disabled = true;
+    try {
+      const r = await rpc('dev_set_current_members', { p_current_emails: pendingCurrent });
+      $('uploadPreview').innerHTML = ''; $('memberFile').value = ''; pendingCurrent = null;
+      showMessage($('membersMsg'), `Member list applied: ${r.current} current, ${r.lapsed} lapsed. Lapsed members can still sign in, but see the dues message instead of signing up.`, 'ok');
+      await loadMembers();
+    } catch (err) { e.target.disabled = false; showMessage($('membersMsg'), err.message); }
+  });
+
   $('duesSaveBtn').addEventListener('click', async () => {
     const text = $('duesInput').value.trim();
     if (!text) { showMessage($('duesMsg'), 'The message cannot be empty.'); return; }
@@ -395,7 +490,7 @@
     const dv = e.target.closest('[data-developer]');
     if (dv) {
       const makeDev = dv.dataset.isDev !== 'true';
-      if (!makeDev && !confirm(`Remove ${dv.dataset.developer} as a developer? They'll lose access to the Developer area and Scheduler.`)) return;
+      if (!makeDev && !confirm(`Remove ${dv.dataset.developer} as a developer? They'll lose access to the Developers pages.`)) return;
       const { error } = await client.from('accounts')
         .update({ is_developer: makeDev }).eq('email', dv.dataset.developer);
       showMessage($('membersMsg'), error ? error.message
@@ -441,11 +536,6 @@
       `Sent ${sent} invite(s).` + (failed.length ? ` ${failed.length} failed: ${failed.join('; ')}` : ''),
       failed.length ? 'error' : 'ok');
     await loadMembers();
-  });
-
-  $('signOutBtn').addEventListener('click', async () => {
-    await client.auth.signOut();
-    location.href = './';
   });
 
   start().catch(err => showMessage($('guardMsg'), err.message));

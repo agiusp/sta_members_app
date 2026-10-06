@@ -45,6 +45,13 @@ await check('the scheduler gets two past Sundays of history, with 5 ball-bringer
   assert.equal(d.history.filter(h => h.brings_balls).length, 10);
 });
 
+await check('the scheduler gets this Sunday\'s season, for counting ball-bringing this season', async () => {
+  const season = await rpcOk(dev, 'dev_current_season');
+  assert.equal(season.name, '2026');
+  assert.equal(season.start_date, '2026-05-03');
+  await rpcFails(alice, 'dev_current_season', {}, /Developers only/);
+});
+
 console.log('Locking');
 await check('courts cannot be locked while sign-ups are still open', async () => {
   await setClock(at(s.signups_close_at, -minute));
@@ -117,6 +124,17 @@ await check('a replacement: unlock, swap in a waitlisted player, re-lock, remove
   assert.ok(after.assignments.some(a => a.player_id === replacement && a.court === 3));
   assert.ok(!after.lineup.some(p => p.id === cantCome), 'removed player is no longer signed up');
   assert.ok(after.session.locked_at, 'still locked');
+});
+
+await check('a ball-bringer chosen by hand (not the first player) is saved as chosen', async () => {
+  await rpcOk(dev, 'dev_unlock_courts');
+  const chosen = structuredClone(good);
+  chosen[0].players.forEach((p, j) => { p.brings_balls = j === 2; });
+  // Same replacement as above (the player who couldn't come is no longer signed up).
+  chosen[2].players[3] = { player_id: lineup.find(p => p.waitlist_place === 1).id, brings_balls: false };
+  await rpcOk(dev, 'dev_lock_courts', { p_org_play: 'mixed', p_courts: chosen });
+  const d = await data();
+  assert.deepEqual(d.assignments.filter(a => a.court === 1 && a.brings_balls).map(a => a.player_id), [chosen[0].players[2].player_id]);
 });
 
 console.log('8pm');

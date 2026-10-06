@@ -1,6 +1,6 @@
 // THE EMAIL DOCUMENT: the starting wording of every email the app sends.
 //
-// Developers can change any of these in the app (Developer area > Emails),
+// Developers can change any of these in the app (Developers > Emails),
 // and the app then uses their version. This file is only the default,
 // used until someone edits an email, and after "Reset to default".
 //
@@ -19,7 +19,7 @@ export type EmailTemplate = {
   sample: Record<string, string>;       // example values for previews
 };
 
-const CONTACTS = "the email addresses in Developer area > Contacts, joined with \"and/or\"";
+const CONTACTS = "the email addresses in Developers > Contacts, joined with \"and/or\"";
 // Previews in the app show the real contacts from settings instead.
 const SAMPLE_CONTACTS = "organizers@example.com and/or helper@example.com";
 const SAMPLE_COURTS = "Court 1: Alice Johnson*, Bob Smith, Carol Lee, David Kim\nCourt 2: Emma Brown*, Frank Davis, Grace Wilson, Henry Moore";
@@ -31,18 +31,18 @@ export const DEFAULT_EMAILS: EmailTemplate[] = [
     name: "Setup-invite",
     sent: "When a developer clicks Send invite (or Invite all) in the Members section",
     to: "The member's email address",
-    subject: "Your invitation to the STA Sunday Program sign-up app",
+    subject: "Your invitation to {{program_name}}",
     body: `Hello {{player_names}},
 
-The STA Sunday Program has a new app for signing up for the Sunday doubles matches. To start using it, click the link below and choose a password:
+You're invited to {{program_name}}, the club's members app, for club news and for signing up for the Sunday doubles matches. To start using it, click the link below and choose a password:
 
 {{link}}
 
 This link works once and expires after 24 hours. If it has expired, contact {{contacts}} for a new one.
 
-Once your password is set, you can sign up each week from Monday 9am until noon on Saturday.
+Once your password is set, you can sign up for Sunday Doubles each week from Monday 9am until noon on Saturday.
 
-What the app stores: your name, email address, play level, and which Sundays you played. Only the program organizers can see your email address and play level; other players see only names on the court assignments. To be removed, contact {{contacts}}.
+What the app stores: your name, email address, play level, sex, which Sundays you played, and any Casual Play times you post. Only the program organizers can see your email address. Other players see names on the court assignments. On the Casual Play calendar, they see the sex and play level of anyone who posts a time, and the name only if that player chooses to show it. When Casual Play times line up, players who show their name for those times get each other's names and email addresses. To be removed, contact {{contacts}}.
 `,
     placeholders: {
       player_names: "the names of the player(s) linked to this email",
@@ -60,8 +60,8 @@ What the app stores: your name, email address, play level, and which Sundays you
     name: "Play-invite",
     sent: "When sign-ups open (Monday 9am by default)",
     to: "Every current member who has set up their account",
-    subject: "STA Sunday doubles, {{date}}: sign-ups are open",
-    body: `Hello STA Players
+    subject: "Sunday Doubles, {{date}}: sign-ups are open",
+    body: `Hello Sunday Doubles players
 
 Sign up below for the Sunday doubles match, {{date}} at 9-10:30am
 
@@ -80,17 +80,17 @@ What to know:
     placeholders: {
       date: "the Sunday's date, e.g. October 4",
       signup_link: "the link to the sign-up page",
-      review_note: "the \"Review my Game\" paragraph below, only for members who played last Sunday; nothing for everyone else",
+      review_note: "the \"Game Review\" paragraph below, only for members who played last Sunday; nothing for everyone else",
       contacts: CONTACTS,
     },
     sample: {
-      date: "October 4", signup_link: "https://<app address>/app/", contacts: SAMPLE_CONTACTS,
+      date: "October 4", signup_link: "https://<app address>/app/signup.html", contacts: SAMPLE_CONTACTS,
       review_note: "\nThank you for playing yesterday! Please take a minute to review your game (the sets you played, your partners and the scores) here:\nhttps://<app address>/app/review.html\n",
     },
   },
   {
     key: "play_invite_review_note",
-    name: "Play-invite: \"Review my Game\" paragraph",
+    name: "Play-invite: \"Game Review\" paragraph",
     sent: "Inside the play-invite, filling its {{review_note}}",
     to: "Only members whose player was on a court last Sunday",
     subject: "(not used: this is a paragraph inside the play-invite)",
@@ -100,7 +100,7 @@ Thank you for playing {{day}}! Please take a minute to review your game (the set
 `,
     placeholders: {
       day: "\"yesterday\", or \"last Sunday\" if the play-invite goes out later in the week",
-      review_link: "the link to the Review my Game tab",
+      review_link: "the link to the Game Review tab",
     },
     sample: { day: "yesterday", review_link: "https://<app address>/app/review.html" },
   },
@@ -109,7 +109,7 @@ Thank you for playing {{day}}! Please take a minute to review your game (the set
     name: "Off the waitlist",
     sent: "When someone cancels before noon Saturday and a waitlisted player moves into a spot",
     to: "The player who moved up (sent to their account's email)",
-    subject: "STA Sunday doubles, {{date}}: good news, you have a spot",
+    subject: "Sunday Doubles, {{date}}: good news, you have a spot",
     body: `Hello {{first_name}},
 
 Good news: a spot opened up, and you are now signed up to play in the Sunday doubles match on {{date}} at 9-10:30am.
@@ -127,15 +127,15 @@ After that, contact {{contacts}}
       signup_link: "the link to the sign-up page",
       contacts: CONTACTS,
     },
-    sample: { first_name: "Zack", date: "October 4", signup_link: "https://<app address>/app/", contacts: SAMPLE_CONTACTS },
+    sample: { first_name: "Zack", date: "October 4", signup_link: "https://<app address>/app/signup.html", contacts: SAMPLE_CONTACTS },
   },
   {
     key: "court_assignments",
     name: "Court assignments",
     sent: "At the player-email time (Saturday 8pm by default), or within a minute of a late lock",
     to: "Everyone on a court (one email per account)",
-    subject: "STA Sunday doubles, {{date}}: court assignments",
-    body: `Hello STA Players
+    subject: "Sunday Doubles, {{date}}: court assignments",
+    body: `Hello Sunday Doubles players
 
 Here are the court assignments for the Sunday doubles match, {{date}} at 9-10:30am
 
@@ -155,7 +155,7 @@ What to know:
       date: "the Sunday's date",
       courts: "one line per court, e.g. \"Court 1: Alice Johnson*, Bob Smith, ...\" (required)",
       waitlist: "\"Wait list, in order: ...\" on its own line, or nothing if there's no waitlist",
-      courts_link: "the link to the Designated Courts page",
+      courts_link: "the link to the Court Assignments page",
       contacts: CONTACTS,
     },
     sample: {
@@ -169,7 +169,7 @@ What to know:
     name: "No spot this week",
     sent: "With the court assignments",
     to: "Each signed-up player left without a court",
-    subject: "STA Sunday doubles, {{date}}: no court spot this week",
+    subject: "Sunday Doubles, {{date}}: no court spot this week",
     body: `Hello {{first_name}},
 
 Thank you for signing up for the Sunday doubles match on {{date}}. Unfortunately, more players signed up this week than we had courts for, so there wasn't a spot for everyone and you did not get a court assignment.{{waitlist_place}}
@@ -193,8 +193,8 @@ Questions? Contact {{contacts}}
     name: "Rain-out expected",
     sent: "At the player-email time (or within a minute of a late choice), when the week is set to Rain-out expected",
     to: "Everyone signed up, waitlist included (one email per account)",
-    subject: "STA Sunday doubles, {{date}}: rain-out expected, no courts assigned",
-    body: `Hello STA Players
+    subject: "Sunday Doubles, {{date}}: rain-out expected, no courts assigned",
+    body: `Hello Sunday Doubles players
 
 The forecast for {{day}} looks pretty bad, so we expect a rain-out and no courts have been assigned for Sunday {{date}}.
 
@@ -214,8 +214,8 @@ Questions? Contact {{contacts}}
     name: "Self-organized play",
     sent: "At the player-email time (or within a minute of a late choice), when the week is set to Uncertain weather",
     to: "Everyone signed up, waitlist included (one email per account)",
-    subject: "STA Sunday doubles, {{date}}: self-organized play, no courts assigned",
-    body: `Hello STA Players
+    subject: "Sunday Doubles, {{date}}: self-organized play, no courts assigned",
+    body: `Hello Sunday Doubles players
 
 The forecast for {{day}} is not looking good, so no courts have been assigned for Sunday {{date}}.
 
@@ -229,6 +229,69 @@ Questions? Contact {{contacts}}
       contacts: CONTACTS,
     },
     sample: { date: "October 4", day: "tomorrow", contacts: SAMPLE_CONTACTS },
+  },
+
+  {
+    key: "casual_game",
+    name: "Casual Play: players line up with your time",
+    sent: "Within a minute of another player's time lining up with yours (and again whenever someone new lines up)",
+    to: "The player who posted the time, if they show their name for it. Only players who also show their name are listed",
+    subject: "Casual Play: players free {{when}}",
+    body: `Hello {{first_name}},
+
+Good news: other players are free at the same time as you on {{when}} ({{looking_for}}), at levels that suit you:
+
+{{players}}
+{{hidden_note}}
+Get in touch with each other (reply-all works if you copy the addresses above) to decide who plays: a singles game, or a doubles game if there are four of you (you can also invite a fourth player). Then book a court.
+
+If more players line up with your time, we'll email you again.
+
+Once you've set up a game, please remove this time from the Casual Play calendar (click your time, then Unsubmit), so other players no longer see you as available then:
+{{slot_link}}
+`,
+    placeholders: {
+      first_name: "the player's first name",
+      when: "the day and time of the player's posted time, e.g. \"Tuesday, October 13, 8:00 – 9:30 AM\"",
+      looking_for: "\"singles\", \"doubles\" or \"singles or doubles\": what the player is looking for",
+      players: "one line per player who lines up: name, sex and level, email address, the time they share and what they're looking for; \"(new)\" marks players added since the last email (required)",
+      hidden_note: "a line saying how many more players line up but haven't shown their name yet (empty if none)",
+      slot_link: "the link that opens this time on the Casual Play calendar, where the player can Unsubmit it",
+    },
+    sample: {
+      first_name: "Yara", when: "Tuesday, October 13, 8:00 – 9:30 AM", looking_for: "singles or doubles",
+      players: "Alice Johnson (F, 3.5) alice.johnson@example.com: free 8:00 – 9:30 AM, singles or doubles\nBob Smith (M, 3.5) bob.smith@example.com: free 8:00 – 9:00 AM, singles (new)",
+      hidden_note: "\n1 more player lines up but hasn't shown their name yet. We've asked them to.\n",
+      slot_link: "https://<app address>/app/casual.html?slot=123",
+    },
+  },
+  {
+    key: "casual_reveal",
+    name: "Casual Play: show your name to meet players",
+    sent: "Within a minute of another player's time lining up with yours, if your name is hidden for that time (and again whenever someone new lines up)",
+    to: "The player who posted the time, if their name is hidden for it",
+    subject: "Casual Play: players free {{when}} – show your name to meet them",
+    body: `Hello {{first_name}},
+
+Other players are free at the same time as you on {{when}} ({{looking_for}}), at levels that suit you:
+
+{{others}}
+
+Your name is hidden for that time, so they don't know about you yet. To get their names and email addresses, and to let them know about you, turn on "Show my name" for that time:
+{{reveal_link}}
+`,
+    placeholders: {
+      first_name: "the player's first name",
+      when: "the day and time of the player's posted time",
+      looking_for: "\"singles\", \"doubles\" or \"singles or doubles\": what the player is looking for",
+      others: "one line per player who lines up: name (if they show it), sex and level, the time they share and what they're looking for (required)",
+      reveal_link: "the link that opens this time on the Casual Play calendar, with its Show my name switch (required)",
+    },
+    sample: {
+      first_name: "Bob", when: "Tuesday, October 13, 8:00 – 9:30 AM", looking_for: "singles or doubles",
+      others: "Alice Johnson (F, 3.5): free 8:00 – 9:30 AM, singles or doubles\nA player who hasn't shown their name yet (M, 4.0): free 8:30 – 9:30 AM, doubles",
+      reveal_link: "https://<app address>/app/casual.html?slot=123",
+    },
   },
 
   // ------------------------------------------------------------- developers
@@ -367,7 +430,7 @@ To change this, unlock in the Scheduler before 8pm:
     sent: "At the player-email time (Saturday 8pm by default), if nothing was locked",
     to: "Every developer",
     subject: "Courts for {{date}} were not locked by 8pm: no emails have gone to players",
-    body: `The courts for Sunday {{date}} were not locked by 8pm, so no court assignment emails have been sent, and the Designated Courts page shows nothing yet.
+    body: `The courts for Sunday {{date}} were not locked by 8pm, so no court assignment emails have been sent, and the Court Assignments page shows nothing yet.
 
 You can still lock them in the Scheduler until {{late_lock_until}} Sunday morning. The emails go out to players within a minute of locking, and a late lock can't be undone:
 {{scheduler_link}}
@@ -382,6 +445,13 @@ If they aren't locked by then, please let the signed-up players know another way
     sample: { date: "October 4", late_lock_until: "7:00 AM", scheduler_link: "https://<app address>/app/scheduler.html" },
   },
 ];
+
+// Every email can also use {{program_name}} (Developers > Emails, schedule
+// and settings).
+for (const t of DEFAULT_EMAILS) {
+  t.placeholders = { program_name: "the app name from Settings", ...t.placeholders };
+  t.sample = { program_name: "STA - STA Members App", ...t.sample };
+}
 
 // Fills {{placeholders}}. Unknown ones are left as they are, so a typo is
 // visible in the preview rather than silently dropped.

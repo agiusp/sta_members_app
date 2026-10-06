@@ -1,8 +1,15 @@
-# STA Sunday Program Scheduler
+# STA Members App
 
-A single-page, no-install web app for assigning available players to 6 courts on Sunday program day.
+The Summit Tennis Association's members app: club news, Sunday Doubles sign-ups, court assignments and game reviews, Casual Play, and the organizers' tools. It lives in `app/` and `supabase/`; see [DEVELOPING.md](DEVELOPING.md).
 
-## Usage
+- **Tour (slides):** [agiusp.github.io/sta_members_app/slides/](https://agiusp.github.io/sta_members_app/slides/) shows every member and developer screen, using made-up players.
+- **Online demo:** [agiusp.github.io/sta_members_app/app/](https://agiusp.github.io/sta_members_app/app/), a temporary demo with made-up players only. Emails aren't sent; they appear in its Demo inbox.
+
+## The original Sunday Program Scheduler
+
+A single-page, no-install web app for assigning available players to 6 courts on Sunday program day. It is still at [agiusp.github.io/sta_members_app/](https://agiusp.github.io/sta_members_app/) while the members app is being introduced.
+
+### Usage
 
 1. Open `index.html` in any browser (double-click it, or `open index.html` on macOS).
 2. Load your roster, either way:
@@ -31,14 +38,14 @@ A single-page, no-install web app for assigning available players to 6 courts on
 
 Only players marked as available are ever placed on a court or shown in the bench; unavailable players are excluded entirely (the status line reports how many were excluded).
 
-## Using it on a phone
+### Using it on a phone
 
 The page itself is fully responsive (single-column court layout, larger tap targets, tap-to-swap interaction — no drag-and-drop anywhere, since that's unreliable on touchscreens) and works in any mobile browser. The only catch is *getting the file onto the phone*, since `index.html` lives on your computer:
 
 - **Easiest — local Wi-Fi server:** on the computer, from this folder run `python3 -m http.server 8000`, then find the computer's local IP (e.g. `ipconfig getifaddr en0` on macOS) and visit `http://<that-ip>:8000/index.html` in the phone's browser (same Wi-Fi network required).
 - **Or airdrop/email/cloud-sync** `index.html` (and a CSV) directly to the phone and open it from Files/Downloads — it runs standalone with no server needed, since everything is client-side.
 
-## Data format
+### Data format
 
 Whether it's a CSV file or a Google Sheet, the first row must be a header row containing these columns (case-insensitive, any column order):
 
@@ -53,7 +60,7 @@ Each court chip is displayed as `Name, Sex, Level` so you can see at a glance wh
 
 **Auto-Assign Courts** only works with a multiple of 4 players, up to a maximum of 24 (6 courts × 4). Before it applies the selected Organized Play format, it benches whoever has the highest sign-up numbers (the last to sign up) — first to get under the 24-player cap if needed, then further if the remaining count still isn't a multiple of 4 — so the format-specific grouping always starts from a clean multiple of 4. You can still move a benched player onto a court by hand afterward.
 
-## Past Play data
+### Past Play data
 
 Past Play is optional. Loading it doesn't change which players get auto-assigned or where. It flags when a court's current 4 players exactly match a group that already played together on some earlier date (blue ring, hover for the date(s); see step 6 above), and it drives the [ball roster](#ball-roster).
 
@@ -70,7 +77,7 @@ Column headers and group-id values are otherwise free-form — the app only grou
 
 The **Past Play Google sheet url** field comes pre-filled with a live demo sheet holding this same data ([view it here](https://docs.google.com/spreadsheets/d/16Bac95620Pg-euiz16EVSMX8hm1L3veozzgxvECoPCc/edit?gid=0#gid=0)) — click **Load from Google Sheet** in that panel to try it directly, no download needed. It must be shared the same way as the roster sheet (*"Anyone with the link — Viewer"*).
 
-## Ball roster
+### Ball roster
 
 For each court, the app picks one player to bring a fresh can of balls and marks their name with `*`. It picks, in order of priority:
 
@@ -80,7 +87,7 @@ For each court, the app picks one player to bring a fresh can of balls and marks
 
 Date columns are ordered by date when every header parses as one (e.g. `Sep 6, 2026`); otherwise they're read left to right, oldest first. With no Past Play loaded, the earliest sign-up on each court brings the balls. Hover a starred name to see when they last brought balls.
 
-## Notes
+### Notes
 
 - Everything runs client-side; no server, backend, or API key is required, and your roster data never passes through any third party besides Google itself when you use the Sheet option.
 - Reading a Google Sheet works by loading it as a script tag (the standard trick for public Sheets, since Google's CSV export doesn't allow direct cross-site fetches) — it only works for sheets shared publicly via link, not private ones. If the sheet isn't shared correctly, or the URL/tab is wrong, you'll get an error after a few seconds rather than a silent failure.

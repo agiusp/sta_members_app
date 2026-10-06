@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Two-step sign-in</title>
+<link rel="stylesheet" href="styles.css">
+<style>
+  .qr { display: block; width: 200px; height: 200px; margin: 10px 0; background: #fff; }
+  .secret { font-family: ui-monospace, Menlo, monospace; font-size: 14px; overflow-wrap: anywhere; }
+  #code { width: 9em; font-size: 20px; letter-spacing: 0.15em; }
+</style>
+</head>
+<body data-page="Two-step sign-in" data-section="">
+
+<main class="page">
+<section class="panel" style="max-width:560px">
+  <div class="panel-title">Two-step sign-in for developers</div>
+  <div id="setup" hidden>
+    <p>The developer pages can change everyone's data, so they need a code from an authenticator app on your phone as well as your password. You set this up once.</p>
+    <ol>
+      <li>Install an authenticator app if you don't have one, e.g. Google Authenticator, Microsoft Authenticator, or the Passwords app on an iPhone.</li>
+      <li>In the app, add an account by scanning this code:
+        <img class="qr" id="qr" alt="Code to scan with your authenticator app">
+        Or type in this key: <span class="secret" id="secret"></span></li>
+      <li>Enter the 6-digit code the app shows below.</li>
+    </ol>
+  </div>
+  <p id="ask" hidden>Enter the 6-digit code from your authenticator app to open the developer pages.</p>
+  <form id="codeForm" class="stack" hidden>
+    <label>Code <input id="code" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" maxlength="6" required></label>
+    <div class="row"><button type="submit" id="verifyBtn">Continue</button></div>
+  </form>
+  <div id="msg"></div>
+  <p class="muted" style="margin-bottom:0">Lost your phone or deleted the app? Ask whoever manages the club's Supabase account to remove your two-step sign-in, then set it up again here.</p>
+</section>
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/dist/umd/supabase.js"
+        integrity="sha384-Rj26LVGvoeRVR6+mwQmFfcR3QOBEwT+ZmuCWpuiqeTzJpCs0ER4ITAWGb4Hiy3Ok"
+        crossorigin="anonymous"></script>
+<script src="config.js"></script>
+<script src="common.js"></script>
+<script>
+(function () {
+  const { client, rpc, showMessage } = STA;
+  const $ = id => document.getElementById(id);
+  const nextParam = new URLSearchParams(location.search).get('next') || '';
+  const next = /^[a-z-]+\.html(\?[\w=&%-]*)?$/.test(nextParam) ? nextParam : 'developer.html';
+  let factorId = null;
+
+  async function start() {
+    if (!(await STA.initPage())) return;
+    const me = await rpc('my_developer');
+    if (!me.developer) { showMessage($('msg'), 'This is only for developers.'); return; }
+    if (me.confirmed) { location.replace(next); return; }
+
+    const { data, error } = await client.auth.mfa.listFactors();
+    if (error) throw error;
+    const verified = (data.totp || []).find(f => f.status === 'verified');
+    if (verified) {
+      factorId = verified.id;
+      $('ask').hidden = false;
+    } else {
+      // Clear any half-finished setup, then start a new one.
+      for (const f of (data.all || []).filter(f => f.status !== 'verified')) {
+        await client.auth.mfa.unenroll({ factorId: f.id });
+      }
+      const { data: en, error: enErr } = await client.auth.mfa.enroll({ factorType: 'totp', friendlyName: 'STA developer' });
+      if (enErr) throw enErr;
+      factorId = en.id;
+      $('qr').src = en.totp.qr_code;
+      $('secret').textContent = en.totp.secret;
+      $('setup').hidden = false;
+    }
+    $('codeForm').hidden = false;
+    $('code').focus();
+  }
+
+  $('codeForm').addEventListener('submit', async e => {
+    e.preventDefault();
+    $('verifyBtn').disabled = true;
+    showMessage($('msg'), '');
+    const { error } = await client.auth.mfa.challengeAndVerify({ factorId, code: $('code').value.trim() });
+    if (error) {
+      $('verifyBtn').disabled = false;
+      showMessage($('msg'), 'That code didn\'t work. Check the app and enter the newest code.');
+      return;
+    }
+    location.replace(next);
+  });
+
+  start().catch(err => showMessage($('msg'), err.message));
+})();
+</script>
+</body>
+</html>

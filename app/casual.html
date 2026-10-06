@@ -1,0 +1,522 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Casual Play</title>
+<link rel="stylesheet" href="styles.css">
+<style>
+  body { --page-width: 1100px; }
+  /* Number of players available in a half hour: pale to dark purple. */
+  :root { --heat-1: #ede9f7; --heat-2: #d3c9ee; --heat-3: #a999dc; --heat-4: #6f58bd; }
+
+  .levels { display: flex; flex-wrap: wrap; gap: 6px; }
+  .levels label {
+    flex-direction: row; align-items: center; gap: 6px; font-size: 14px; color: var(--ink); font-weight: 600;
+    border: 1px solid #d5d9de; border-radius: 20px; padding: 6px 12px; cursor: pointer; background: #fff;
+  }
+  .levels label.on { border-color: var(--accent); background: #f0eff7; color: var(--accent); }
+  .levels label.off { opacity: 0.45; cursor: not-allowed; }
+  .prefs-row { display: flex; flex-wrap: wrap; gap: 14px 28px; align-items: flex-start; }
+  .prefs-row label.check { font-size: 14px; color: var(--ink); font-weight: 400; }
+
+  .casual-layout { display: grid; grid-template-columns: minmax(0, 1fr) 290px; gap: 18px; align-items: start; }
+  .weeks { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+  .weeks button { min-height: 34px; padding: 5px 12px; font-size: 13px; }
+  .weeks button.secondary.active { background: var(--accent); color: #fff; }
+  .legend { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; font-size: 12px; color: var(--muted); margin-bottom: 10px; }
+  .legend .sw { display: inline-block; width: 18px; height: 14px; border-radius: 3px; vertical-align: -2px; margin-right: 4px; border: 1px solid #d5d9de; }
+
+  table.cal { border-collapse: separate; border-spacing: 0; table-layout: fixed; min-width: 560px; user-select: none; }
+  table.cal th { font-size: 12px; text-align: center; padding: 4px 2px 6px; line-height: 1.25; }
+  table.cal th.today { color: var(--accent); }
+  table.cal th.time-col, table.cal td.time { width: 52px; }
+  table.cal td { border-top: none; padding: 0; }
+  table.cal td.time { font-size: 11px; color: var(--muted); text-align: right; padding-right: 6px; vertical-align: top; transform: translateY(-7px); }
+  table.cal td.c {
+    height: 20px; border-left: 1px solid #e6e6ea; cursor: pointer; text-align: center;
+    font-size: 11px; font-weight: 700; color: #3d2f7a;
+  }
+  table.cal tr.hour td.c { border-top: 1px solid #dcdce2; }
+  table.cal tr.half td.c { border-top: 1px dotted #ececf0; }
+  table.cal td.c:last-child { border-right: 1px solid #e6e6ea; }
+  table.cal tr:last-child td.c { border-bottom: 1px solid #dcdce2; }
+  table.cal td.c:hover { outline: 2px solid var(--accent); outline-offset: -2px; }
+  table.cal td.c:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+  table.cal td.c.h1 { background: var(--heat-1); }
+  table.cal td.c.h2 { background: var(--heat-2); }
+  table.cal td.c.h3 { background: var(--heat-3); color: #fff; }
+  table.cal td.c.h4 { background: var(--heat-4); color: #fff; }
+  table.cal td.c.past { background: repeating-linear-gradient(45deg, #f4f4f6, #f4f4f6 4px, #ebebee 4px, #ebebee 8px); cursor: not-allowed; color: transparent; }
+  table.cal td.c.past:hover { outline: none; }
+  /* Your own times: a yellow-and-navy edge. */
+  table.cal td.c.mine { box-shadow: inset 4px 0 0 var(--accent), inset -4px 0 0 var(--ball); }
+  /* The time box being set up. */
+  table.cal td.c.draft { background: #fffbd6; box-shadow: inset 2px 0 0 var(--accent), inset -2px 0 0 var(--accent); color: var(--accent); }
+  table.cal td.c.draft-top { box-shadow: inset 2px 0 0 var(--accent), inset -2px 0 0 var(--accent), inset 0 2px 0 var(--accent); }
+  table.cal td.c.draft-bottom { box-shadow: inset 2px 0 0 var(--accent), inset -2px 0 0 var(--accent), inset 0 -2px 0 var(--accent); }
+  table.cal td.c.draft-top.draft-bottom { box-shadow: inset 0 0 0 2px var(--accent); }
+
+  .tip {
+    position: fixed; z-index: 20; pointer-events: none; max-width: 280px;
+    background: #2c2d2e; color: #fff; font-size: 12px; line-height: 1.45; border-radius: 6px; padding: 8px 10px;
+    box-shadow: 0 4px 14px rgba(0,0,0,0.2);
+  }
+  .tip strong { display: block; margin-bottom: 3px; }
+
+  .side { position: sticky; top: 12px; }
+  .side h3 { font-family: var(--serif); font-size: 18px; margin: 0 0 6px; }
+  .side .when { font-size: 15px; margin: 0 0 12px; }
+  .side .field { margin-bottom: 12px; }
+  .lengths { display: flex; gap: 6px; }
+  .lengths button { flex: 1; min-height: 36px; padding: 5px 8px; }
+  .lengths button.secondary.active { background: var(--accent); color: #fff; }
+  .people { list-style: none; padding: 0; margin: 6px 0 0; font-size: 13px; }
+  .people li { padding: 5px 0; border-top: 1px solid #eceef1; }
+  .people .lvl { color: var(--muted); }
+  .side .actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 4px; }
+  .side-close { display: none; }
+  .types { display: flex; gap: 6px; }
+  .types button { flex: 1; min-height: 36px; padding: 5px 8px; }
+  .types button.secondary.active { background: var(--accent); color: #fff; }
+  .lines-up { font-size: 13px; background: var(--green-bg); border-left: 3px solid var(--green-border); border-radius: 4px; padding: 6px 8px; margin: 6px 0; }
+  .lines-up ul { margin: 4px 0 0; padding-left: 18px; }
+
+  /* Narrow screens: the calendar scrolls sideways, and the side panel becomes
+     a sheet at the bottom of the screen while a time is chosen. */
+  @media (max-width: 900px) {
+    .casual-layout { grid-template-columns: minmax(0, 1fr); }
+    .side { position: fixed; left: 0; right: 0; bottom: 0; top: auto; z-index: 30; margin: 0;
+            border-radius: 12px 12px 0 0; max-height: 70vh; overflow-y: auto; box-shadow: 0 -6px 20px rgba(0,0,0,0.15); }
+    .side.idle { display: none; }
+    .side-close { display: block; position: absolute; right: 8px; top: 8px; min-height: 0; padding: 4px 10px; }
+    main.page { padding-bottom: 120px; }
+  }
+</style>
+</head>
+<body data-page="Casual Play" data-section="casual">
+
+<main class="page">
+<div class="test-banner" id="testBanner" hidden></div>
+
+<section class="panel" id="prefsPanel" hidden>
+  <div class="prefs-row">
+    <div>
+      <div class="panel-title" style="margin-bottom:8px">Show players at these levels (choose 1 or 2)</div>
+      <div class="levels" id="levels"></div>
+    </div>
+    <div>
+      <div class="panel-title" style="margin-bottom:8px">My settings</div>
+      <label class="check"><input type="checkbox" id="showName"> Show my name on the times I post (you can change it for each time)</label>
+      <label class="check" style="margin-top:6px"><input type="checkbox" id="notify"> Email me when players' times line up with mine</label>
+    </div>
+  </div>
+  <p class="muted" style="margin-bottom:0">Other members see the sex and play level of everyone who posts a time, and your name only if you show it for that time.
+    With these emails on, you hear about every player whose time shares at least an hour with yours, when your levels suit each other and you're both open to the same game (Either suits Singles and Doubles).
+    If you show your name for that time, you get the names and email addresses of the players who also show theirs, so you can decide together who plays: singles, or doubles if there are four of you. If your name is hidden, you get an email asking you to show it.</p>
+  <div id="prefsMsg"></div>
+</section>
+
+<div class="casual-layout">
+  <section class="panel">
+    <div class="weeks" id="weeks"></div>
+    <div class="legend" id="legend"></div>
+    <div class="table-wrap"><table class="cal" id="cal"></table></div>
+    <div id="calMsg"><p class="muted">Loading…</p></div>
+  </section>
+  <aside class="panel side idle" id="side" aria-live="polite"></aside>
+</div>
+<div class="tip" id="tip" hidden></div>
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/dist/umd/supabase.js"
+        integrity="sha384-Rj26LVGvoeRVR6+mwQmFfcR3QOBEwT+ZmuCWpuiqeTzJpCs0ER4ITAWGb4Hiy3Ok"
+        crossorigin="anonymous"></script>
+<script src="config.js"></script>
+<script src="common.js"></script>
+<script>
+(function () {
+  const { esc, rpc, showMessage } = STA;
+  const $ = id => document.getElementById(id);
+  const FIRST = 6 * 60, LAST = 21 * 60;     // 6am to 9pm, US Eastern
+  const LENGTHS = [60, 90, 120];
+  const LEVEL_LABEL = { '2.5': '2.5 and below', '5.0+': '5.0 and up' };
+
+  let data = null;       // from casual_calendar
+  let prefs = null;      // { show_name, notify, levels }
+  let days = [];         // 'YYYY-MM-DD', today first
+  let week = 0;          // 0..3
+  let draft = null;      // { day, start, minutes, playerId }: the time box being set up
+  let picked = null;     // { day, t }: a half hour clicked on one of your own times
+  let busy = false;
+  const TYPE_LABEL = { singles: 'Singles', doubles: 'Doubles', either: 'Singles or doubles' };
+  let lastType = 'either';
+  try { lastType = localStorage.getItem('sta-casual-type') || 'either'; } catch (_) { /* storage blocked */ }
+
+  // ---------- Times and days ----------
+  function addDays(ymd, n) {
+    const [y, m, d] = ymd.split('-').map(Number);
+    return new Date(Date.UTC(y, m - 1, d + n)).toISOString().slice(0, 10);
+  }
+  function dayLabel(ymd, opts) {
+    const [y, m, d] = ymd.split('-').map(Number);
+    return new Date(Date.UTC(y, m - 1, d, 12)).toLocaleDateString('en-US', { timeZone: 'UTC', ...opts });
+  }
+  // 570 -> "9:30 AM"
+  function clock(min) {
+    const h = Math.floor(min / 60) % 24, m = min % 60;
+    return `${(h + 11) % 12 + 1}:${String(m).padStart(2, '0')} ${h < 12 ? 'AM' : 'PM'}`;
+  }
+  // "9:00 – 10:30 AM", or "11:30 AM – 1:00 PM"
+  function range(start, minutes) {
+    const a = clock(start), b = clock(start + minutes);
+    return (a.slice(-2) === b.slice(-2) ? a.slice(0, -3) : a) + ' – ' + b;
+  }
+  const hhmm = min => `${String(Math.floor(min / 60)).padStart(2, '0')}:${String(min % 60).padStart(2, '0')}`;
+  const hours = min => (min / 60) + (min === 60 ? ' hr' : ' hrs');
+
+  // ---------- Who is available ----------
+  // Others are shown at the chosen levels (and when their level is unknown); your own times always.
+  const shown = s => s.mine || s.level === null || prefs.levels.includes(s.level);
+  const covers = (s, day, t) => s.day === day && s.start <= t && t < s.start + s.minutes;
+  const at = (day, t) => data.slots.filter(s => shown(s) && covers(s, day, t));
+  const isPast = (day, t) => day < data.today || (day === data.today && t <= data.now_minutes);
+  // Players (not you) available for any part of a time box.
+  const during = (day, start, minutes) => data.slots.filter(s => shown(s) && !s.mine && s.day === day &&
+    s.start < start + minutes && start < s.start + s.minutes);
+
+  function personLine(s) {
+    const about = [s.sex || '?', s.level ? `level ${s.level}` : 'level not set'].join(' · ');
+    return `<span>${s.name ? `<strong>${esc(s.name)}</strong>` : '<em>Name not shown</em>'}</span>
+      <span class="lvl">· ${esc(about)} · ${esc(range(s.start, s.minutes))} · ${esc(TYPE_LABEL[s.play_type] || '')}</span>`;
+  }
+
+  // ---------- Loading ----------
+  async function start() {
+    if (!(await STA.initPage())) return;
+    await load();
+  }
+
+  async function load() {
+    try { data = await rpc('casual_calendar'); }
+    catch (err) {
+      showMessage($('calMsg'), err.message === 'Not a member'
+        ? 'This email is not on the active member list. If you think that is a mistake, contact the program organizers.'
+        : 'Could not load the calendar: ' + err.message);
+      return;
+    }
+    if (!prefs) prefs = data.prefs;
+    days = Array.from({ length: data.days }, (_, i) => addDays(data.today, i));
+    STA.showTestClock($('testBanner'), data.test_mode, data.now);
+    $('prefsPanel').hidden = false;
+    $('calMsg').innerHTML = '';
+    // Drop a time box or selection that no longer makes sense.
+    if (draft && isPast(draft.day, draft.start)) draft = null;
+    if (picked && !at(picked.day, picked.t).some(s => s.mine)) picked = null;
+    renderPrefs();
+    openLinkedSlot();
+    render();
+  }
+
+  // From the "show your name" email: casual.html?slot=123 opens that time.
+  function openLinkedSlot() {
+    const id = Number(new URLSearchParams(location.search).get('slot'));
+    if (!id) return;
+    history.replaceState(null, '', location.pathname);
+    const s = data.slots.find(x => x.mine && x.id === id);
+    if (!s) { showMessage($('calMsg'), 'That time has passed or was removed.'); return; }
+    week = Math.min(3, Math.floor(days.indexOf(s.day) / 7));
+    picked = { day: s.day, t: s.start };
+    draft = null;
+    setTimeout(() => $('side').scrollIntoView({ behavior: 'smooth', block: 'start' }), 50);
+  }
+
+  // ---------- Settings ----------
+  function renderPrefs() {
+    $('levels').innerHTML = data.levels.map(l => {
+      const on = prefs.levels.includes(l);
+      const off = !on && prefs.levels.length >= 2;
+      return `<label class="${on ? 'on' : ''} ${off ? 'off' : ''}" title="${off ? 'Untick a level first (2 at most)' : ''}">
+        <input type="checkbox" value="${esc(l)}" ${on ? 'checked' : ''} ${off ? 'disabled' : ''}> ${esc(LEVEL_LABEL[l] || l)}</label>`;
+    }).join('');
+    $('showName').checked = prefs.show_name;
+    $('notify').checked = prefs.notify;
+  }
+
+  async function savePrefs(next) {
+    const before = prefs;
+    prefs = { ...prefs, ...next };
+    renderPrefs();
+    render();
+    showMessage($('prefsMsg'), '');
+    try {
+      prefs = await rpc('casual_save_prefs', { p_show_name: prefs.show_name, p_notify: prefs.notify, p_levels: prefs.levels });
+      await load();
+    } catch (err) {
+      prefs = before;
+      renderPrefs();
+      render();
+      showMessage($('prefsMsg'), err.message);
+    }
+  }
+
+  $('levels').addEventListener('change', e => {
+    const l = e.target.value;
+    const levels = e.target.checked ? [...prefs.levels, l] : prefs.levels.filter(x => x !== l);
+    if (!levels.length) { renderPrefs(); showMessage($('prefsMsg'), 'Keep at least 1 level ticked.'); return; }
+    savePrefs({ levels: data.levels.filter(x => levels.includes(x)) });
+  });
+  $('showName').addEventListener('change', () => savePrefs({ show_name: $('showName').checked }));
+  $('notify').addEventListener('change', () => savePrefs({ notify: $('notify').checked }));
+
+  // ---------- Calendar ----------
+  function render() {
+    const weekDays = days.slice(week * 7, week * 7 + 7);
+    $('weeks').innerHTML = [0, 1, 2, 3].map(w => {
+      const a = days[w * 7], b = days[w * 7 + 6];
+      const label = `${dayLabel(a, { month: 'short', day: 'numeric' })} – ${dayLabel(b, a.slice(5, 7) === b.slice(5, 7) ? { day: 'numeric' } : { month: 'short', day: 'numeric' })}`;
+      return `<button class="secondary ${w === week ? 'active' : ''}" data-week="${w}" aria-pressed="${w === week}">${esc(label)}</button>`;
+    }).join('');
+    $('legend').innerHTML = 'Players available:' +
+      ['1', '2', '3', '4+'].map((n, i) => `<span><span class="sw" style="background:var(--heat-${i + 1})"></span>${n}</span>`).join('') +
+      `<span><span class="sw" style="box-shadow: inset 4px 0 0 var(--accent), inset -4px 0 0 var(--ball)"></span>Your times</span>`;
+
+    const head = `<tr><th class="time-col"></th>${weekDays.map(d =>
+      `<th class="${d === data.today ? 'today' : ''}">${esc(dayLabel(d, { weekday: 'short' }))}<br>${esc(dayLabel(d, { month: 'short', day: 'numeric' }))}</th>`).join('')}</tr>`;
+    let rows = '';
+    for (let t = FIRST; t < LAST; t += 30) {
+      rows += `<tr class="${t % 60 ? 'half' : 'hour'}"><td class="time">${t % 60 ? '' : esc(clock(t).replace(':00 ', ' ').toLowerCase())}</td>`;
+      for (const d of weekDays) {
+        const here = at(d, t);
+        const past = isPast(d, t);
+        const cls = ['c'];
+        if (past) cls.push('past');
+        else if (here.length) cls.push('h' + Math.min(here.length, 4));
+        if (here.some(s => s.mine)) cls.push('mine');
+        if (draft && draft.day === d && t >= draft.start && t < draft.start + draft.minutes) {
+          cls.push('draft');
+          if (t === draft.start) cls.push('draft-top');
+          if (t + 30 === draft.start + draft.minutes) cls.push('draft-bottom');
+        }
+        const label = `${dayLabel(d, { weekday: 'long', month: 'long', day: 'numeric' })}, ${clock(t)}: ${here.length} available`;
+        rows += `<td class="${cls.join(' ')}" data-day="${d}" data-t="${t}" ${past ? '' : 'tabindex="0" role="button"'} aria-label="${esc(label)}">${!past && here.length ? here.length : ''}</td>`;
+      }
+      rows += '</tr>';
+    }
+    $('cal').innerHTML = `<thead>${head}</thead><tbody>${rows}</tbody>`;
+    renderSide();
+  }
+
+  $('weeks').addEventListener('click', e => {
+    const b = e.target.closest('button[data-week]');
+    if (!b) return;
+    week = Number(b.dataset.week);
+    render();
+  });
+
+  // ---------- Hover: who is available ----------
+  $('cal').addEventListener('mousemove', e => {
+    const td = e.target.closest('td.c');
+    const here = td && !td.classList.contains('past') ? at(td.dataset.day, Number(td.dataset.t)) : [];
+    if (!here.length) { $('tip').hidden = true; return; }
+    const t = Number(td.dataset.t);
+    $('tip').innerHTML = `<strong>${esc(dayLabel(td.dataset.day, { weekday: 'short', month: 'short', day: 'numeric' }))}, ${esc(range(t, 30))}</strong>` +
+      here.map(s => `<div>${s.mine ? 'You: ' : ''}${s.name ? esc(s.name) : 'Name not shown'} · ${esc(s.sex || '?')} · ${esc(s.level || 'level not set')} · ${esc(TYPE_LABEL[s.play_type] || '')}</div>`).join('');
+    $('tip').hidden = false;
+    const x = Math.min(e.clientX + 14, window.innerWidth - $('tip').offsetWidth - 8);
+    const y = e.clientY + 16 + $('tip').offsetHeight > window.innerHeight ? e.clientY - $('tip').offsetHeight - 10 : e.clientY + 16;
+    $('tip').style.left = x + 'px';
+    $('tip').style.top = y + 'px';
+  });
+  $('cal').addEventListener('mouseleave', () => { $('tip').hidden = true; });
+
+  // ---------- Click: set up a time box, or pick one of your times ----------
+  function myPlayerSlots(playerId, day) {
+    return data.slots.filter(s => s.mine && s.player_id === playerId && s.day === day);
+  }
+  // Lengths that fit before 9pm and don't overlap that player's own times.
+  function lengthOk(d, minutes) {
+    if (d.start + minutes > LAST) return false;
+    return !myPlayerSlots(d.playerId, d.day).some(s => s.start < d.start + minutes && d.start < s.start + s.minutes);
+  }
+
+  function choose(day, t) {
+    showMessage($('calMsg'), '');
+    if (isPast(day, t)) return;
+    if (at(day, t).some(s => s.mine)) { picked = { day, t }; draft = null; render(); return; }
+    picked = null;
+    const playerId = draft && data.players.some(p => p.id === draft.playerId) ? draft.playerId : data.players[0]?.id;
+    // A 1-hour box from the half hour clicked; near 9pm it starts earlier so it fits.
+    let startAt = Math.min(t, LAST - 60);
+    if (isPast(day, startAt)) startAt = t;
+    const d = { day, start: startAt, minutes: 60, playerId, playType: lastType, showName: prefs.show_name };
+    const fits = LENGTHS.filter(m => lengthOk(d, m));
+    if (!fits.length) {
+      draft = null;
+      render();
+      showMessage($('calMsg'), 'There isn\'t a free hour from there: it runs into one of your times or past 9pm. Pick an earlier time.');
+      return;
+    }
+    d.minutes = fits[0];
+    draft = d;
+    render();
+  }
+
+  $('cal').addEventListener('click', e => {
+    const td = e.target.closest('td.c');
+    if (td) choose(td.dataset.day, Number(td.dataset.t));
+  });
+  $('cal').addEventListener('keydown', e => {
+    const td = e.target.closest('td.c');
+    if (td && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); choose(td.dataset.day, Number(td.dataset.t)); }
+  });
+
+  // The players whose times line up with one of your times (with match emails on).
+  function linesUp(slot) {
+    const list = slot.lines_up || [];
+    if (!list.length) return '';
+    const et = iso => new Date(iso).toLocaleTimeString('en-US', { timeZone: STA.TZ, hour: 'numeric', minute: '2-digit' });
+    const when = o => { const [a, b] = [et(o.starts_at), et(o.ends_at)]; return `${a.slice(-2) === b.slice(-2) ? a.slice(0, -3) : a} – ${b}`; };
+    const note = slot.shown ? 'Players who show their name get your name and email address by email, and you get theirs.'
+      : 'Your name is hidden for this time: show it to swap names and email addresses with these players.';
+    return `<div class="lines-up"><strong>Lines up with ${list.length} player${list.length === 1 ? '' : 's'}</strong><ul>${list.map(o =>
+      `<li>${esc(o.name || 'A player who hasn\'t shown their name')} (${esc([o.sex, o.level].filter(Boolean).join(', '))}): ${esc(when(o))}, ${esc(LOOKING_FOR[o.play_type])}</li>`).join('')}</ul>
+      <span class="muted">${esc(note)}</span></div>`;
+  }
+  const LOOKING_FOR = { singles: 'singles', doubles: 'doubles', either: 'singles or doubles' };
+
+  // ---------- Side panel ----------
+  function renderSide() {
+    const side = $('side');
+    side.classList.toggle('idle', !draft && !picked);
+    const close = '<button class="secondary side-close" data-act="close" aria-label="Close">Close</button>';
+    const lapsed = data.membership_current === false;
+
+    if (draft) {
+      const others = during(draft.day, draft.start, draft.minutes);
+      const who = data.players.length > 1
+        ? `<div class="field"><label>Who is available
+             <select id="draftPlayer">${data.players.map(p =>
+               `<option value="${p.id}" ${p.id === draft.playerId ? 'selected' : ''}>${esc(p.first_name)} ${esc(p.last_name)}</option>`).join('')}</select></label></div>`
+        : '';
+      side.innerHTML = `${close}
+        <h3>Post your availability</h3>
+        <p class="when"><strong>${esc(dayLabel(draft.day, { weekday: 'long', month: 'short', day: 'numeric' }))}</strong><br>${esc(range(draft.start, draft.minutes))}</p>
+        ${who}
+        <div class="field"><label>How long</label>
+          <div class="lengths">${LENGTHS.map(m => `<button type="button" class="secondary ${m === draft.minutes ? 'active' : ''}"
+            data-len="${m}" ${lengthOk(draft, m) ? '' : 'disabled'} aria-pressed="${m === draft.minutes}">${hours(m)}</button>`).join('')}</div></div>
+        <div class="field"><label>Looking for</label>
+          <div class="types">${['singles', 'doubles', 'either'].map(t => `<button type="button" class="secondary ${t === draft.playType ? 'active' : ''}"
+            data-type="${t}" aria-pressed="${t === draft.playType}">${t === 'either' ? 'Either' : TYPE_LABEL[t]}</button>`).join('')}</div></div>
+        <div class="field"><label class="check" style="font-size:14px;color:var(--ink);font-weight:400">
+          <input type="checkbox" id="draftShowName" ${draft.showName ? 'checked' : ''}> Show my name for this time</label></div>
+        ${prefs.notify ? '' : '<p class="muted">To hear by email when other players\' times line up with yours, tick "Email me when players\' times line up with mine" above.</p>'}
+        ${lapsed ? `<div class="msg error">${esc(data.dues_message)}</div>` : ''}
+        <div class="actions">
+          <button data-act="submit" ${lapsed || busy ? 'disabled' : ''}>Submit</button>
+          <button class="secondary" data-act="cancel">Cancel</button>
+        </div>
+        <div id="sideMsg"></div>
+        <div class="field" style="margin-top:14px"><div class="panel-title" style="margin-bottom:0">Also available then</div>
+          ${others.length ? `<ul class="people">${others.map(s => `<li>${personLine(s)}</li>`).join('')}</ul>`
+                          : '<p class="muted" style="margin:4px 0 0">Nobody at your chosen levels yet.</p>'}</div>`;
+      return;
+    }
+
+    if (picked) {
+      const here = at(picked.day, picked.t);
+      const mine = here.filter(s => s.mine);
+      const others = mine.length ? during(picked.day, Math.min(...mine.map(s => s.start)),
+        Math.max(...mine.map(s => s.start + s.minutes)) - Math.min(...mine.map(s => s.start))) : [];
+      side.innerHTML = `${close}
+        <h3>Your availability</h3>
+        ${mine.map(s => `<div class="field">
+          <p class="when"><strong>${esc(dayLabel(s.day, { weekday: 'long', month: 'short', day: 'numeric' }))}</strong><br>${esc(range(s.start, s.minutes))}
+            · ${esc(TYPE_LABEL[s.play_type])}
+            ${data.players.length > 1 ? `<br><span class="muted">${esc(s.name)}</span>` : ''}</p>
+          <label class="check" style="font-size:14px;color:var(--ink);font-weight:400;margin-bottom:8px">
+            <input type="checkbox" data-slotname="${s.id}" ${s.shown ? 'checked' : ''} ${busy ? 'disabled' : ''}> Show my name for this time</label>
+          ${linesUp(s)}
+          <button class="danger" data-act="unsubmit" data-slot="${s.id}" ${busy ? 'disabled' : ''}>Unsubmit</button></div>`).join('')}
+        <div id="sideMsg"></div>
+        <div class="field" style="margin-top:14px"><div class="panel-title" style="margin-bottom:0">Also available then</div>
+          ${others.length ? `<ul class="people">${others.map(s => `<li>${personLine(s)}</li>`).join('')}</ul>`
+                          : '<p class="muted" style="margin:4px 0 0">Nobody at your chosen levels yet.</p>'}</div>`;
+      return;
+    }
+
+    side.innerHTML = `<h3>Post a time</h3>
+      <p class="muted" style="margin-top:0">Click any hour or half hour on the calendar to set up a 1-hour time box (you can make it 1.5 or 2 hours), then click Submit.</p>
+      <p class="muted">To take a time back, click one of your times and click Unsubmit.</p>
+      <p class="muted" style="margin-bottom:0">Hover over a colored time to see who's available.</p>`;
+  }
+
+  $('side').addEventListener('change', async e => {
+    if (e.target.id === 'draftShowName' && draft) { draft.showName = e.target.checked; return; }
+    if (e.target.dataset.slotname) {
+      if (busy) return;
+      busy = true;
+      try {
+        await rpc('casual_set_slot_name', { p_slot_id: Number(e.target.dataset.slotname), p_show_name: e.target.checked });
+      } catch (err) { busy = false; showMessage($('sideMsg'), err.message); e.target.checked = !e.target.checked; return; }
+      busy = false;
+      const shown = e.target.checked;
+      await load();
+      showMessage($('sideMsg'), shown ? 'Your name now shows for this time.' : 'Your name is now hidden for this time.', 'ok');
+      return;
+    }
+    if (e.target.id === 'draftPlayer' && draft) {
+      draft.playerId = Number(e.target.value);
+      const fits = LENGTHS.filter(m => lengthOk(draft, m));
+      if (!fits.includes(draft.minutes)) draft.minutes = fits[0];
+      if (!draft.minutes) { draft = null; showMessage($('calMsg'), 'That player is already available then.'); }
+      render();
+    }
+  });
+
+  $('side').addEventListener('click', async e => {
+    const b = e.target.closest('button');
+    if (!b || busy) return;
+    if (b.dataset.len) { draft.minutes = Number(b.dataset.len); render(); return; }
+    if (b.dataset.type) {
+      draft.playType = lastType = b.dataset.type;
+      try { localStorage.setItem('sta-casual-type', lastType); } catch (_) { /* storage blocked */ }
+      render();
+      return;
+    }
+    const act = b.dataset.act;
+    if (act === 'close' || act === 'cancel') { draft = null; picked = null; render(); return; }
+    if (act === 'submit' || act === 'unsubmit') {
+      busy = true;
+      b.disabled = true;
+      let done = '';
+      try {
+        if (act === 'submit') {
+          await rpc('casual_submit', { p_player_id: draft.playerId, p_date: draft.day, p_start: hhmm(draft.start), p_minutes: draft.minutes,
+                                       p_play_type: draft.playType, p_show_name: draft.showName });
+          picked = { day: draft.day, t: draft.start };
+          draft = null;
+          done = 'Submitted. Others at your level can now see it.';
+        } else {
+          await rpc('casual_unsubmit', { p_slot_id: Number(b.dataset.slot) });
+          picked = null;
+          done = 'Unsubmitted.';
+        }
+      } catch (err) {
+        busy = false;
+        b.disabled = false;
+        showMessage($('sideMsg'), err.message);
+        return;
+      }
+      busy = false;
+      await load();
+      showMessage(picked ? $('sideMsg') : $('calMsg'), done, 'ok');
+    }
+  });
+
+  start().catch(err => showMessage($('calMsg'), err.message));
+})();
+</script>
+</body>
+</html>

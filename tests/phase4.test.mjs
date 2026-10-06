@@ -238,7 +238,8 @@ await check('after 7am Sunday it is too late to lock', async () => {
   const w = await openWeek(3, 8);
   await setClock(w.wsat(20));
   await runTasks();
-  await setClock(at(w.wsat(12), 19 * hour)); // Sunday 7:00am
+  // Sunday 7:00am (from the app, so it's right on the weekend the clocks change).
+  await setClock((await rpcOk(dev, 'dev_week_times')).late_lock_until);
   await rpcFails(dev, 'dev_lock_courts', { p_org_play: 'mixed', p_courts: [] }, /too late/);
   await rpcFails(dev, 'dev_lock_courts', { p_org_play: null, p_courts: [], p_mode: 'rain_expected' }, /too late/);
 });

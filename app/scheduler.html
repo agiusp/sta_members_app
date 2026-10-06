@@ -3,10 +3,10 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>STA Scheduler</title>
+<title>Scheduler</title>
 <link rel="stylesheet" href="styles.css">
 <style>
-  body { max-width: 1100px; }
+  body { --page-width: 1100px; }
   .courts-grid {
     display: grid;
     grid-template-columns: repeat(3, 1fr);
@@ -51,6 +51,15 @@
   .chip.selected { border-color: var(--accent); background: #eaf2fb; box-shadow: 0 0 0 2px var(--accent); }
   .chip .tag { font-size: 11px; font-weight: 700; color: #6b4511; }
   .ball-mark { font-weight: 700; color: #b7791f; }
+  /* Modify bring-ball assignments: one star per time this season; red = last
+     Sunday played, pink = the Sunday before. */
+  .stars { font-size: 13px; letter-spacing: 1px; color: #b7791f; white-space: nowrap; }
+  .stars .last { color: #d62828; }
+  .stars .prev { color: #f06ba8; }
+  .chip.bringer { border-color: #b7791f; background: #fff8dc; box-shadow: 0 0 0 2px #e3c35a; }
+  .chip .ball-tag { font-size: 11px; font-weight: 700; color: #7a5a00; background: #fde68a; border-radius: 10px; padding: 1px 7px; }
+  .ball-mode .court .chip { cursor: pointer; }
+  .ball-mode .bench .chip { cursor: not-allowed; opacity: 0.8; }
   .court.droppable, .bench.droppable { outline: 2px dashed var(--accent); outline-offset: 2px; cursor: pointer; }
   .move-hint {
     position: sticky; top: 8px; z-index: 5; background: #eaf2fb; border: 1px solid var(--accent);
@@ -66,37 +75,70 @@
   .swatch.red { background: var(--red-bg); border: 2px solid var(--red-border); }
   .swatch.blue { background: #fff; box-shadow: 0 0 0 2px var(--accent); }
   .swatch.amber { background: var(--amber-bg); border: 2px solid var(--amber-border); }
+  .source-switch { display: inline-flex; border: 1px solid var(--accent); border-radius: 8px; overflow: hidden; margin-bottom: 16px; }
+  .source-switch button { border: none; border-radius: 0; min-height: 40px; padding: 8px 18px; font-weight: 600; }
+  .source-switch button + button { border-left: 1px solid var(--accent); }
+  .source-switch button.active { background: var(--accent); color: #fff; }
+  .upload-mode .sunday-only { display: none !important; }
+  body:not(.upload-mode) .upload-only { display: none !important; }
+  @media print {
+    .site-header, .section-head, .source-switch, #uploadPanel, .no-print, #schedArea > .panel:first-child .row, .legend, .move-hint, .muted { display: none !important; }
+    main.page { padding: 0; max-width: none; }
+    .court { break-inside: avoid; }
+  }
   .lock-status { font-size: 14px; padding: 10px 12px; border-radius: 6px; margin-bottom: 12px; }
   .lock-status.open { background: #eef4fb; }
   .lock-status.locked { background: var(--green-bg); border: 1px solid var(--green-border); }
   .lock-status.final { background: #f0f1f3; border: 1px solid #b0b8c1; }
 </style>
 </head>
-<body>
+<body data-page="Scheduler" data-section="dev" data-tab="scheduler">
 
-<header>
-  <h1>Scheduler</h1>
-  <div class="who">
-    <a href="developer.html">Developer area</a>
-    <a href="./">Member page</a>
-  </div>
-</header>
-
+<main class="page">
 <div class="test-banner" id="testBanner" hidden></div>
 <div id="guardMsg"></div>
 
 <div id="content" hidden>
+  <div class="source-switch" role="group" aria-label="Who to schedule">
+    <button class="secondary" data-source="sunday">Sunday Doubles</button>
+    <button class="secondary" data-source="upload">Upload my players</button>
+  </div>
+
+  <!-- Upload my players: any list of players, arranged here only (nothing is saved or emailed). -->
+  <section class="panel" id="uploadPanel" hidden>
+    <div class="panel-title">Upload my players</div>
+    <p class="muted" style="margin-top:0">Arrange doubles for any group of players. Use a table with
+      column 1 = player name, column 2 = play level, column 3 = sex (M or F), saved as a CSV file or a
+      tab-separated .txt file; or paste players below. Nothing is saved to the app or emailed: copy or print the courts when you're done.</p>
+    <div class="row">
+      <label>File (.csv or .txt)
+        <input type="file" id="playersFile" accept=".csv,.tsv,.txt,text/csv,text/plain,text/tab-separated-values"></label>
+    </div>
+    <label style="margin-top:12px">Or paste players: one per line, name, level, sex, separated by commas
+      <textarea id="playersText" rows="6" placeholder="Alice Johnson, 3.5, F&#10;Bob Smith, 3.5, M&#10;Carol Lee, 4.0, F&#10;David Kim, 4.0, M"
+        style="font:inherit;font-size:14px;padding:8px 9px;border:1px solid #cbd2d9;border-radius:6px;width:100%"></textarea></label>
+    <div class="row" style="margin-top:10px">
+      <button id="usePlayersBtn">Use these players</button>
+    </div>
+    <div id="uploadMsg"></div>
+  </section>
+
+  <div id="sundayMsg"></div>
+
+  <div id="schedArea">
   <section class="panel">
     <h2 id="sessionTitle"></h2>
     <div class="lock-status" id="lockStatus"></div>
     <div class="row">
-      <label>This week
+      <label id="weekModeLabel">This week
         <select id="weekMode">
           <option value="courts">Assign courts</option>
           <option value="rain_expected">Rain-out expected: no courts</option>
           <option value="self_organized">Uncertain weather: self-organized play</option>
         </select></label>
       <span class="row" id="courtControls">
+      <label id="numCourtsLabel" hidden>Courts
+        <select id="numCourts"></select></label>
       <label>Organized Play
         <select id="orgPlay">
           <option value="same-sex">Same-sex doubles</option>
@@ -107,9 +149,15 @@
         </select></label>
       <button id="autoAssignBtn">Auto-Assign Courts</button>
       <button class="secondary" id="clearBtn">Clear Courts</button>
+      <button class="secondary" id="ballBtn" aria-pressed="false">Modify bring-ball assignments</button>
       </span>
       <button id="lockBtn">Lock courts</button>
       <button class="secondary" id="unlockBtn" hidden>Unlock</button>
+      <span class="row" id="uploadOutput" hidden>
+        <button class="secondary" id="copyBtn">Copy courts as text</button>
+        <button class="secondary" id="printBtn">Print</button>
+        <button class="secondary" id="changePlayersBtn">Change players</button>
+      </span>
     </div>
     <div id="msg"></div>
   </section>
@@ -122,7 +170,7 @@
 
   <section class="panel bench" id="benchPanel">
     <div class="court-header">
-      <div class="court-title">Bench: signed up, not on a court</div>
+      <div class="court-title" id="benchTitle">Bench: signed up, not on a court</div>
       <div class="court-count" id="benchCount"></div>
     </div>
     <div class="bench-list" id="benchList"></div>
@@ -131,15 +179,19 @@
   <div class="legend">
     <div class="legend-item"><span class="swatch green"></span> Exactly 4 players who fit the Organized Play format</div>
     <div class="legend-item"><span class="swatch red"></span> Doesn't fit the format, or not exactly 4 players</div>
-    <div class="legend-item"><span class="swatch blue"></span> These 4 played together on an earlier Sunday (hover for dates)</div>
-    <div class="legend-item"><strong class="ball-mark">*</strong> Brings a fresh can of balls (longest since last bringing them)</div>
-    <div class="legend-item"><span class="swatch amber"></span> On the waitlist</div>
+    <div class="legend-item sunday-only"><span class="swatch blue"></span> These 4 played together on an earlier Sunday (hover for dates)</div>
+    <div class="legend-item"><strong class="ball-mark">*</strong> <span id="ballLegend">Brings a fresh can of balls (chosen automatically: longest since last bringing them; change it with Modify bring-ball assignments)</span></div>
+    <div class="legend-item"><span class="swatch amber"></span> <span id="extraLegend">On the waitlist</span></div>
   </div>
-  <p class="muted">Tap one player, then another, to swap them; or tap a player, then an empty spot, to move them.
+  <p class="muted sunday-only">Tap one player, then another, to swap them; or tap a player, then an empty spot, to move them.
     If a player can't come, swap their replacement in from the bench, then tap the player and choose
     <em>Remove from this week</em>. Everyone left on the bench gets the "no spot this week" email at 8pm.</p>
+  <p class="muted upload-only">Tap one player, then another, to swap them; or tap a player, then an empty spot, to move them.
+    Players who don't fit on the courts wait on the bench.</p>
+  </div>
   </div>
 </div>
+</main>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/dist/umd/supabase.js"
         integrity="sha384-Rj26LVGvoeRVR6+mwQmFfcR3QOBEwT+ZmuCWpuiqeTzJpCs0ER4ITAWGb4Hiy3Ok"
@@ -148,7 +200,7 @@
 <script src="common.js"></script>
 <script>
 (function () {
-  const { client, esc, rpc, fmtDateTime, fmtPlayDate, showMessage } = STA;
+  const { esc, rpc, fmtDateTime, fmtPlayDate, showMessage } = STA;
   const $ = id => document.getElementById(id);
   const COURT_SIZE = 4;
   const WEEK_LABEL = {
@@ -165,32 +217,73 @@
   let cutIds = new Set();   // players with a spot left off courts to make a multiple of 4
   let selected = null;      // { playerId, from: 'bench' | courtIndex }
   let history = null;       // derived from data.history
+  let season = null;        // { name, start_date } of this Sunday's season
+  let ballMode = false;     // Modify bring-ball assignments is on
+  let chosenBringer = [];   // per court: the ball-bringer a developer chose (else automatic)
+  let source = 'sunday';    // 'sunday' (this week's sign-ups) or 'upload' (Upload my players)
+  const UPLOAD_KEY = 'sta-scheduler-upload';
 
   // ---------- Loading ----------
   async function start() {
-    const { data: { session } } = await client.auth.getSession();
-    if (!session) { location.href = './'; return; }
+    if (!(await STA.initPage())) return;
     if (!(await rpc('is_developer'))) { showMessage($('guardMsg'), 'This area is for developers only.'); return; }
     $('content').hidden = false;
-    await load();
+    let saved = null;
+    try { saved = JSON.parse(localStorage.getItem(UPLOAD_KEY)); } catch (_) { /* storage blocked */ }
+    if (saved && saved.text) { $('playersText').value = saved.text; }
+    await setSource(saved && saved.source === 'upload' ? 'upload' : 'sunday');
+  }
+
+  async function setSource(src) {
+    source = src;
+    document.body.classList.toggle('upload-mode', src === 'upload');
+    document.querySelectorAll('[data-source]').forEach(b => {
+      b.classList.toggle('active', b.dataset.source === src);
+      b.setAttribute('aria-pressed', String(b.dataset.source === src));
+    });
+    remember();
+    ballMode = false;
+    selected = null;
+    showMessage($('msg'), '');
+    showMessage($('sundayMsg'), '');
+    if (src === 'sunday') {
+      $('uploadPanel').hidden = true;
+      await load();
+    } else {
+      $('testBanner').hidden = true;
+      usePlayers({ quiet: true });
+    }
+  }
+
+  function remember(extra = {}) {
+    try {
+      localStorage.setItem(UPLOAD_KEY, JSON.stringify({ source, text: $('playersText').value, ...extra }));
+    } catch (_) { /* storage blocked */ }
   }
 
   async function load() {
-    data = await rpc('dev_scheduler_data');
-    if (!data.session) { showMessage($('guardMsg'), 'There is no upcoming Sunday session.'); $('content').hidden = true; return; }
+    [data, season] = await Promise.all([rpc('dev_scheduler_data'), rpc('dev_current_season')]);
+    if (source !== 'sunday') return;  // switched while loading
+    $('schedArea').hidden = !data.session;
+    if (!data.session) { showMessage($('sundayMsg'), 'There is no upcoming Sunday session. You can still use Upload my players.'); return; }
     byId = new Map(data.lineup.map(p => [p.id, p]));
     history = buildHistory(data.history);
     const n = data.session.num_courts;
     boxes = Array.from({ length: n }, () => []);
     savedBringers = null;
+    chosenBringer = [];
     cutIds = new Set();
     selected = null;
-    // Start from saved assignments (locked, or kept after an unlock).
+    // Start from saved assignments (locked, or kept after an unlock), keeping
+    // their ball-bringers.
     if (data.assignments.length) {
       savedBringers = new Set(data.assignments.filter(a => a.brings_balls).map(a => a.player_id));
       data.assignments
         .filter(a => byId.has(a.player_id) && a.court <= n)
-        .forEach(a => boxes[a.court - 1].push(a.player_id));
+        .forEach(a => {
+          boxes[a.court - 1].push(a.player_id);
+          if (a.brings_balls) chosenBringer[a.court - 1] = a.player_id;
+        });
     }
     const onCourt = new Set(boxes.flat());
     bench = data.lineup.filter(p => !onCourt.has(p.id)).map(p => p.id);
@@ -201,6 +294,9 @@
 
   // ---------- State of the week ----------
   function state() {
+    if (source === 'upload') {
+      return { final: false, locked: false, late: false, tooLate: false, beforeCutoff: false, editable: true, canUnlock: false };
+    }
     const s = data.session, now = new Date(data.now);
     const afterPublish = now >= new Date(s.courts_publish_at);
     const locked = !!s.locked_at;
@@ -230,7 +326,36 @@
       }
     });
     const configs = [...groups.values()].filter(g => g.ids.size === COURT_SIZE);
-    return { numDates: dates.length, balls, configs };
+    // This season only, for the stars: times each player brought balls, and
+    // who brought them on the last two Sundays played.
+    const start = season ? season.start_date : '0000-00-00';
+    const seasonRows = rows.filter(r => r.play_date >= start);
+    const seasonDates = [...new Set(seasonRows.map(r => r.play_date))].sort();
+    const [lastDate, prevDate] = [seasonDates[seasonDates.length - 1], seasonDates[seasonDates.length - 2]];
+    const seasonBalls = new Map(); // player id -> { count, last, prev }
+    seasonRows.filter(r => r.brings_balls).forEach(r => {
+      const b = seasonBalls.get(r.player_id) || { count: 0, last: false, prev: false };
+      b.count++;
+      if (r.play_date === lastDate) b.last = true;
+      if (r.play_date === prevDate) b.prev = true;
+      seasonBalls.set(r.player_id, b);
+    });
+    return { numDates: dates.length, balls, configs, seasonBalls, lastDate, prevDate };
+  }
+
+  // One star per time this season; the first red if they brought balls the
+  // last Sunday played, the next pink if they brought them the Sunday before.
+  function starsHtml(id) {
+    const b = history.seasonBalls.get(id);
+    if (!b) return '<span class="stars" title="Hasn\'t brought balls this season"></span>';
+    const stars = [];
+    if (b.last) stars.push('<span class="last">★</span>');
+    if (b.prev) stars.push('<span class="prev">★</span>');
+    while (stars.length < b.count) stars.push('★');
+    const when = [b.last && `last Sunday played (${fmtPlayDate(history.lastDate)})`,
+                  b.prev && `the Sunday before (${fmtPlayDate(history.prevDate)})`].filter(Boolean).join(' and ');
+    const title = `Brought balls ${b.count} time${b.count === 1 ? '' : 's'} this season${when ? `, including ${when}` : ''}`;
+    return `<span class="stars" title="${esc(title)}" aria-label="${esc(title)}">${stars.join('')}</span>`;
   }
 
   const weeksSinceBalls = id => {
@@ -249,8 +374,16 @@
       cmp(byId.get(a).place, byId.get(b).place))[0];
   }
 
-  function bringerFor(ids) {
+  // The court's ball-bringer: as saved once locked; otherwise the developer's
+  // choice if that player is still on the court, else the automatic choice.
+  function bringerFor(ids, court) {
+    // Upload my players: no history, so a random player on each court (kept until changed).
+    if (source === 'upload') {
+      if (!ids.includes(chosenBringer[court])) chosenBringer[court] = ids[Math.floor(Math.random() * ids.length)];
+      return chosenBringer[court] ?? null;
+    }
     if (!state().editable && savedBringers) return ids.find(id => savedBringers.has(id)) ?? null;
+    if (ids.includes(chosenBringer[court])) return chosenBringer[court];
     return pickBallBringer(ids);
   }
 
@@ -323,6 +456,7 @@
     boxes = Array.from({ length: n }, (_, i) => courts[i] || []);
     bench = data.lineup.filter(p => !p.has_spot).map(p => p.id);
     cutIds = new Set();
+    chosenBringer = [];
     selected = null;
     render();
   }
@@ -331,6 +465,7 @@
   function clearCourts() {
     bench = [...boxes.flat(), ...bench];
     boxes = boxes.map(() => []);
+    chosenBringer = [];
     selected = null;
     render();
   }
@@ -345,6 +480,13 @@
 
   function tapChip(id, from) {
     if (!state().editable) return;
+    if (ballMode) {
+      if (from === 'bench') { showMessage($('msg'), 'Only a player on a court can bring the balls for it.'); return; }
+      showMessage($('msg'), '');
+      chosenBringer[from] = id;
+      render();
+      return;
+    }
     if (!selected) selected = { playerId: id, from };
     else if (selected.playerId === id) selected = null;
     else {
@@ -358,7 +500,7 @@
   }
 
   function tapContainer(where) {
-    if (!selected || !state().editable) return;
+    if (ballMode || !selected || !state().editable) return;
     if (selected.from !== where) {
       removeFrom(selected.playerId, selected.from);
       placeAt(selected.playerId, where);
@@ -372,26 +514,47 @@
   function chipHtml(id, from, isBringer) {
     const p = byId.get(id);
     const cls = ['chip'];
+    if (ballMode && isBringer) cls.push('bringer');
     if (selected && selected.playerId === id) cls.push('selected');
     if (!p.has_spot) cls.push('wait'); else if (cutIds.has(id)) cls.push('cut');
     const title = isBringer ? ` title="${esc(ballTooltip(id))}"` : '';
-    const tag = !p.has_spot ? `<span class="tag">Waitlist #${p.waitlist_place}</span>` : '';
+    const tag = !p.has_spot ? `<span class="tag">${source === 'upload' ? 'Extra' : `Waitlist #${p.waitlist_place}`}</span>` : '';
     return `<div class="${cls.join(' ')}" data-id="${id}" data-from="${from}"${title}>
-      ${esc(p.first_name)} ${esc(p.last_name)}${isBringer ? '<span class="ball-mark">*</span>' : ''},
-      ${esc(p.sex || '?')}, ${esc(p.level || '?')} ${tag}</div>`;
+      <span>${esc(p.first_name)} ${esc(p.last_name)}${isBringer && !ballMode ? '<span class="ball-mark">*</span>' : ''},</span>
+      ${esc(p.sex || '?')}, ${esc(p.level || '?')} ${ballMode ? starsHtml(id) : ''}
+      ${ballMode && isBringer ? '<span class="ball-tag">Brings balls</span>' : ''} ${tag}</div>`;
   }
 
   function render() {
     const s = data.session, st = state(), mode = $('orgPlay').value;
-    $('testBanner').hidden = !data.test_mode;
+    if (!st.editable) ballMode = false;
+    const upload = source === 'upload';
+    $('testBanner').hidden = upload || !data.test_mode;
     $('testBanner').textContent = `Test mode: the app is pretending it's ${fmtDateTime(data.now)}.`;
-    $('sessionTitle').textContent = `${fmtPlayDate(s.play_date)} · ${s.num_courts} courts`;
+    $('sessionTitle').textContent = upload
+      ? `Your players · ${data.lineup.length} players · ${s.num_courts} court${s.num_courts === 1 ? '' : 's'}`
+      : `${fmtPlayDate(s.play_date)} · ${s.num_courts} courts`;
+    $('weekModeLabel').hidden = upload;
+    $('numCourtsLabel').hidden = !upload;
+    $('uploadOutput').hidden = !upload;
+    $('lockStatus').hidden = upload;
+    $('benchTitle').textContent = upload ? 'Bench: not on a court' : 'Bench: signed up, not on a court';
+    $('ballLegend').textContent = upload
+      ? 'Brings a fresh can of balls (picked at random; change it with Modify bring-ball assignments)'
+      : 'Brings a fresh can of balls (chosen automatically: longest since last bringing them; change it with Modify bring-ball assignments)';
+    $('extraLegend').textContent = upload ? 'More players than courts: waiting on the bench' : 'On the waitlist';
+    if (upload) {
+      const most = Math.max(1, Math.ceil(data.lineup.length / COURT_SIZE));
+      $('numCourts').innerHTML = Array.from({ length: most }, (_, i) => `<option ${i + 1 === s.num_courts ? 'selected' : ''}>${i + 1}</option>`).join('');
+    }
 
-    const weekMode = $('weekMode').value;
+    const weekMode = upload ? 'courts' : $('weekMode').value;
     const weather = weekMode !== 'courts';
     const lockedAs = s.week_mode !== 'courts' ? ` as "${WEEK_LABEL[s.week_mode]}"` : '';
     const status = $('lockStatus');
-    if (st.final) {
+    if (upload) {
+      // No lock or emails for uploaded players.
+    } else if (st.final) {
       status.className = 'lock-status final';
       status.textContent = st.tooLate
         ? `Not locked by the 7am Sunday cutoff (${fmtDateTime(s.late_lock_until)}), so no emails went to players this week.`
@@ -413,7 +576,7 @@
     $('orgPlay').disabled = !st.editable;
     $('autoAssignBtn').disabled = !st.editable;
     $('clearBtn').disabled = !st.editable;
-    $('lockBtn').hidden = !st.editable;
+    $('lockBtn').hidden = !st.editable || upload;
     $('lockBtn').disabled = st.beforeCutoff;
     $('lockBtn').textContent = (weather ? 'Confirm: no courts this week' : 'Lock courts') + (st.late ? ' and send now' : '');
     $('unlockBtn').hidden = !st.canUnlock;
@@ -434,7 +597,7 @@
     grid.innerHTML = '';
     boxes.forEach((ids, i) => {
       const ok = boxSpecOk(ids, mode);
-      const bringer = bringerFor(ids);
+      const bringer = bringerFor(ids, i);
       const past = pastDatesForCourt(ids);
       const court = document.createElement('div');
       court.className = 'court' + (ok ? ' valid' : '') + (selected ? ' droppable' : '') + (past.length ? ' repeat' : '');
@@ -453,7 +616,7 @@
     const order = id => { const p = byId.get(id); return (p.has_spot ? 0 : 1e6) + (cutIds.has(id) ? 1e3 : 0) + p.place; };
     bench.sort((a, b) => order(a) - order(b));
     const waiting = bench.filter(id => !byId.get(id).has_spot).length;
-    $('benchCount').textContent = `${bench.length} player(s), ${waiting} from the waitlist`;
+    $('benchCount').textContent = upload ? `${bench.length} player(s)` : `${bench.length} player(s), ${waiting} from the waitlist`;
     $('benchList').innerHTML = bench.length ? bench.map(id => chipHtml(id, 'bench', false)).join('')
       : '<span class="muted">Everyone signed up is on a court.</span>';
     $('benchPanel').classList.toggle('droppable', !!selected);
@@ -465,11 +628,27 @@
     }));
 
     const hint = $('moveHint');
-    if (selected) {
+    $('ballBtn').textContent = ballMode ? 'Done modifying bring-ball assignments' : 'Modify bring-ball assignments';
+    $('ballBtn').setAttribute('aria-pressed', String(ballMode));
+    $('ballBtn').disabled = !st.editable;
+    $('content').classList.toggle('ball-mode', ballMode);
+    if (ballMode) {
+      hint.hidden = false;
+      hint.innerHTML = upload ? `<span>Tap a player on a court to make them that court's ball-bringer.</span>
+        <span class="row" style="gap:8px"><button class="secondary" id="ballAutoBtn">Pick again at random</button>
+        <button id="ballDoneBtn">Done</button></span>` : `<span>Tap a player on a court to make them that court's ball-bringer.
+        <span class="stars">★</span> = times they brought balls this season${history.lastDate ? `;
+        <span class="stars"><span class="last">★</span></span> = brought them the last Sunday played (${esc(fmtPlayDate(history.lastDate))})` : ''}${history.prevDate ? `;
+        <span class="stars"><span class="prev">★</span></span> = the Sunday before (${esc(fmtPlayDate(history.prevDate))})` : ''}.</span>
+        <span class="row" style="gap:8px"><button class="secondary" id="ballAutoBtn">Back to automatic</button>
+        <button id="ballDoneBtn">Done</button></span>`;
+      $('ballAutoBtn').addEventListener('click', () => { chosenBringer = []; render(); });
+      $('ballDoneBtn').addEventListener('click', () => { ballMode = false; render(); });
+    } else if (selected) {
       const p = byId.get(selected.playerId);
       hint.hidden = false;
       hint.innerHTML = `<span>${esc(p.first_name)} ${esc(p.last_name)} selected: tap another player to swap, or an empty spot to move them. Tap them again to cancel.</span>
-        <button class="danger" id="removeBtn">Remove from this week</button>`;
+        <button class="danger" id="removeBtn">${upload ? 'Remove from the list' : 'Remove from this week'}</button>`;
       $('removeBtn').addEventListener('click', removeSelected);
     } else {
       hint.hidden = true;
@@ -479,6 +658,14 @@
   // ---------- Actions ----------
   async function removeSelected() {
     const p = byId.get(selected.playerId);
+    if (source === 'upload') {
+      removeFrom(p.id, selected.from);
+      byId.delete(p.id);
+      data.lineup = data.lineup.filter(x => x.id !== p.id);
+      selected = null;
+      render();
+      return;
+    }
     if (!confirm(`Remove ${p.first_name} ${p.last_name} from this Sunday? They won't get any email. This is recorded as a developer removal.`)) return;
     try {
       await rpc('dev_remove_signup', { p_signup_id: p.signup_id });
@@ -521,7 +708,7 @@
     if (!confirm(msg)) return;
 
     const courts = boxes.map((ids, i) => {
-      const bringer = pickBallBringer(ids);
+      const bringer = bringerFor(ids, i);
       return { court: i + 1, players: ids.map(id => ({ player_id: id, brings_balls: id === bringer })) };
     }).filter(c => c.players.length);
     try {
@@ -543,9 +730,127 @@
   $('weekMode').addEventListener('change', () => { selected = null; render(); });
   $('autoAssignBtn').addEventListener('click', autoAssign);
   $('clearBtn').addEventListener('click', clearCourts);
+  $('ballBtn').addEventListener('click', () => { ballMode = !ballMode; selected = null; showMessage($('msg'), ''); render(); });
   $('lockBtn').addEventListener('click', lockCourts);
   $('unlockBtn').addEventListener('click', unlockCourts);
   $('benchPanel').addEventListener('click', () => tapContainer('bench'));
+  document.querySelectorAll('[data-source]').forEach(b =>
+    b.addEventListener('click', () => setSource(b.dataset.source).catch(err => showMessage($('sundayMsg'), err.message))));
+
+  // ---------- Upload my players ----------
+  const SEX = { m: 'M', male: 'M', man: 'M', men: 'M', f: 'F', female: 'F', w: 'F', woman: 'F', women: 'F', l: 'F', lady: 'F' };
+
+  // Rows of name, level, sex: tab-separated or comma-separated, one player
+  // per line (or all on one line, in threes). A heading row is skipped.
+  function readPlayers(text) {
+    let rows = STA.parseDelimited(text);
+    if (rows.length === 1 && rows[0].length > 3 && rows[0].length % 3 === 0) {
+      const one = rows[0];
+      rows = Array.from({ length: one.length / 3 }, (_, i) => one.slice(i * 3, i * 3 + 3));
+    }
+    const looksLikeHeading = r => /name|player/i.test(r[0] || '') && !SEX[(r[2] || '').toLowerCase()] && isNaN(parseFloat(r[1]));
+    if (rows.length && looksLikeHeading(rows[0])) rows = rows.slice(1);
+    const players = [], problems = [];
+    rows.forEach((r, i) => {
+      const name = (r[0] || '').replace(/\s+/g, ' ').trim();
+      if (!name) { problems.push(`Line ${i + 1}: no name, skipped`); return; }
+      const lvlText = (r[1] || '').trim();
+      const lvl = /^\d+(\.\d+)?$/.test(lvlText) ? parseFloat(lvlText).toFixed(1) : lvlText || null;
+      const sex = SEX[(r[2] || '').trim().toLowerCase()] || null;
+      if (!lvl || !sex) problems.push(`${name}: ${[!lvl && 'no level', !sex && `sex "${r[2] || ''}" not recognized (use M or F)`].filter(Boolean).join(', ')}`);
+      const cut = name.lastIndexOf(' ');
+      players.push({ first_name: cut > 0 ? name.slice(0, cut) : name, last_name: cut > 0 ? name.slice(cut + 1) : '', level: lvl, sex });
+    });
+    return { players, problems };
+  }
+
+  // Builds the Scheduler's data from the players, then arranges the courts.
+  function useUploaded(players, numCourts) {
+    const cap = numCourts * COURT_SIZE;
+    data = {
+      now: new Date().toISOString(), test_mode: false, assignments: [], history: [],
+      session: { num_courts: numCourts, week_mode: 'courts' },
+      lineup: players.map((p, i) => ({ ...p, id: i + 1, place: i + 1, has_spot: i < cap, waitlist_place: i < cap ? null : i - cap + 1 }))
+    };
+    byId = new Map(data.lineup.map(p => [p.id, p]));
+    history = buildHistory([]);
+    savedBringers = null;
+    $('weekMode').value = 'courts';
+    $('schedArea').hidden = false;
+    autoAssign();
+  }
+
+  function usePlayers({ quiet = false } = {}) {
+    showMessage($('uploadMsg'), '');
+    const text = $('playersText').value;
+    const { players, problems } = text.trim() ? readPlayers(text) : { players: [], problems: [] };
+    remember();
+    if (!players.length) {
+      $('uploadPanel').hidden = false;
+      $('schedArea').hidden = true;
+      if (!quiet) showMessage($('uploadMsg'), 'Add some players first: choose a file, or paste one player per line as name, level, sex.');
+      return;
+    }
+    if (players.length < COURT_SIZE) {
+      $('uploadPanel').hidden = false;
+      $('schedArea').hidden = true;
+      showMessage($('uploadMsg'), `That's ${players.length} player(s): doubles needs at least 4.`);
+      return;
+    }
+    let saved = null;
+    try { saved = JSON.parse(localStorage.getItem(UPLOAD_KEY)); } catch (_) { /* storage blocked */ }
+    const fit = Math.max(1, Math.floor(players.length / COURT_SIZE));
+    const courts = quiet && saved && saved.numCourts >= 1 && saved.numCourts <= Math.ceil(players.length / COURT_SIZE) ? saved.numCourts : fit;
+    $('uploadPanel').hidden = true;
+    useUploaded(players, courts);
+    remember({ numCourts: courts });
+    if (problems.length) {
+      showMessage($('msg'), `Loaded ${players.length} players. Please check: ${problems.slice(0, 8).join('; ')}${problems.length > 8 ? `; and ${problems.length - 8} more` : ''}. Players with no level or sex show "?" and may not fit some formats.`);
+    }
+  }
+
+  $('playersFile').addEventListener('change', async () => {
+    const file = $('playersFile').files[0];
+    if (!file) return;
+    if (/\.xlsx?$/i.test(file.name)) {
+      showMessage($('uploadMsg'), 'Please save the spreadsheet as a CSV or tab-separated text file first, then upload that.');
+      return;
+    }
+    $('playersText').value = await file.text();
+    $('playersFile').value = '';
+    usePlayers();
+  });
+  $('usePlayersBtn').addEventListener('click', () => usePlayers());
+  $('changePlayersBtn').addEventListener('click', () => {
+    $('uploadPanel').hidden = false;
+    $('uploadPanel').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  });
+  $('numCourts').addEventListener('change', () => {
+    const players = data.lineup.map(({ first_name, last_name, level, sex }) => ({ first_name, last_name, level, sex }));
+    const n = Number($('numCourts').value);
+    remember({ numCourts: n });
+    useUploaded(players, n);
+  });
+
+  function courtsAsText() {
+    const name = id => { const p = byId.get(id); return `${p.first_name} ${p.last_name}`.trim(); };
+    const lines = boxes.map((ids, i) => {
+      const b = bringerFor(ids, i);
+      return `Court ${i + 1}: ${ids.map(id => name(id) + (id === b ? '*' : '')).join(', ') || '(empty)'}`;
+    });
+    if (bench.length) lines.push(`Not on a court: ${bench.map(name).join(', ')}`);
+    lines.push('', '* = bringing a new can of tennis balls for that court');
+    return lines.join('\n');
+  }
+  $('copyBtn').addEventListener('click', async () => {
+    try {
+      await navigator.clipboard.writeText(courtsAsText());
+      showMessage($('msg'), 'Courts copied. Paste them into an email or message.', 'ok');
+    } catch (_) {
+      showMessage($('msg'), 'Copying is blocked in this browser. Use Print instead.');
+    }
+  });
+  $('printBtn').addEventListener('click', () => window.print());
 
   start().catch(err => showMessage($('guardMsg'), err.message));
 })();

@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Demo inbox</title>
+<link rel="stylesheet" href="styles.css">
+<style>
+  .mail { border-top: 1px solid #eceef1; }
+  .mail:first-child { border-top: none; }
+  .mail summary { cursor: pointer; padding: 12px 0; display: flex; flex-wrap: wrap; gap: 2px 12px; align-items: baseline; }
+  .mail summary strong { flex: 1 1 320px; }
+  .mail .meta { font-size: 12px; color: var(--muted); }
+  .mail pre { white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; font-size: 14px; line-height: 1.5;
+              background: #f7f7f9; border-radius: 6px; padding: 12px; margin: 0 0 14px; }
+  .mail pre a { color: var(--accent); }
+  #filter { max-width: 320px; }
+</style>
+</head>
+<body data-page="Demo inbox" data-section="demo">
+
+<main class="page">
+<div class="section-head"><h1>Demo inbox</h1></div>
+<section class="panel">
+  <p class="muted" id="intro" style="margin-top:0">In the demo, emails are not sent. Here are the emails you would have received, newest first.</p>
+  <label id="filterWrap" hidden>Show emails to <select id="filter"><option value="">Everyone</option></select></label>
+  <div id="mails"><p class="muted">Loading…</p></div>
+  <div id="msg"></div>
+</section>
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/dist/umd/supabase.js"
+        integrity="sha384-Rj26LVGvoeRVR6+mwQmFfcR3QOBEwT+ZmuCWpuiqeTzJpCs0ER4ITAWGb4Hiy3Ok"
+        crossorigin="anonymous"></script>
+<script src="config.js"></script>
+<script src="common.js"></script>
+<script>
+(function () {
+  const { esc, rpc, fmtDateTime, showMessage } = STA;
+  const $ = id => document.getElementById(id);
+  let mails = [];
+  const linkify = text => esc(text).replace(/https?:\/\/[^\s<]+[^\s<.,;:!?)'"]/g,
+    url => `<a href="${url}" target="_blank" rel="noopener">${url}</a>`);
+
+  function render() {
+    const to = $('filter').value;
+    const shown = to ? mails.filter(m => m.to === to) : mails;
+    $('mails').innerHTML = shown.length ? shown.map(m => `<details class="mail">
+        <summary><strong>${esc(m.subject)}</strong><span class="meta">To ${esc(m.to)} · ${esc(fmtDateTime(m.at))}</span></summary>
+        <pre>${linkify(m.body)}</pre></details>`).join('')
+      : '<p class="muted">No emails yet.</p>';
+  }
+
+  async function start() {
+    const session = await STA.initPage();
+    if (!session) return;
+    mails = await rpc('demo_inbox');
+    const people = [...new Set(mails.map(m => m.to))].sort();
+    if (people.some(p => p !== session.user.email)) {
+      $('intro').textContent = 'In the demo, emails are not sent. As a developer you see everyone\'s emails here, newest first.';
+      $('filter').insertAdjacentHTML('beforeend', people.map(p => `<option>${esc(p)}</option>`).join(''));
+      $('filterWrap').hidden = false;
+    }
+    $('filter').addEventListener('change', render);
+    render();
+  }
+  start().catch(err => { $('mails').innerHTML = ''; showMessage($('msg'), err.message); });
+})();
+</script>
+</body>
+</html>

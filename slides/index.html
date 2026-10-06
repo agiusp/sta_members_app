@@ -1,0 +1,420 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>STA Members App tour</title>
+<meta name="description" content="A tour of the STA Members App for members and developers, using made-up players.">
+<link rel="icon" href="img/sta-logo.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=Playfair+Display:wght@700&display=swap" rel="stylesheet">
+<style>
+:root { --navy: #372a7b; --ball: #eaed4e; --ink: #2c2d2e; --muted: #626770; --paper: #f4f4f1; --card: #fff;
+        --serif: 'Playfair Display', Georgia, serif; --sans: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif; }
+* { box-sizing: border-box; }
+html, body { margin: 0; background: #1d1840; color: var(--ink); font-family: var(--sans); }
+.deck { position: fixed; inset: 0; display: grid; place-items: center; }
+.slide { width: 1600px; height: 900px; background: var(--paper); position: absolute; top: 50%; left: 50%;
+         transform-origin: center; padding: 64px 80px; display: none; overflow: hidden; }
+.slide.active { display: grid; }
+.slide::after { content: ''; position: absolute; left: 0; right: 0; bottom: 0; height: 10px;
+                background: linear-gradient(90deg, var(--navy) 0 85%, var(--ball) 85%); }
+.kicker { font-size: 15px; font-weight: 700; letter-spacing: 0.18em; text-transform: uppercase; color: var(--navy); margin-bottom: 14px; }
+h1, h2 { font-family: var(--serif); color: var(--ink); margin: 0 0 22px; line-height: 1.1; }
+h1 { font-size: 80px; } h2 { font-size: 46px; }
+ul { margin: 0; padding-left: 24px; } li { font-size: 22px; line-height: 1.45; margin-bottom: 14px; color: #3a3c40; }
+.split { grid-template-columns: 470px 1fr; gap: 56px; align-items: center; }
+.split .visual { display: flex; justify-content: center; align-items: center; min-width: 0; height: 100%; }
+.split.stacked .visual .pair { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; align-items: start; width: 100%; }
+figure { margin: 0; }
+.browser { background: #fff; border-radius: 12px; box-shadow: 0 18px 50px rgba(30, 24, 70, 0.22); overflow: hidden; max-width: 100%; }
+.browser .bar { height: 34px; background: #e9e8ef; display: flex; align-items: center; gap: 7px; padding: 0 14px; }
+.browser .bar i { width: 11px; height: 11px; border-radius: 50%; background: #c9c7d3; }
+.browser .bar span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-left: 14px; font-size: 13px; color: var(--muted); background: #fff; border-radius: 6px; padding: 3px 12px; }
+.browser img { display: block; width: 100%; max-height: 720px; object-fit: cover; object-position: top; }
+.pair .browser img { max-height: 640px; }
+.phone { width: 260px; border-radius: 38px; border: 10px solid #18162a; background: #18162a; overflow: hidden;
+         box-shadow: 0 18px 50px rgba(30, 24, 70, 0.28); }
+.phone img { display: block; width: 100%; height: 520px; object-fit: cover; object-position: top; border-radius: 28px; }
+.phones { grid-template-rows: auto auto 1fr; }
+.phone-row { display: flex; justify-content: center; gap: 48px; align-items: start; margin-top: 10px; }
+.sub { font-size: 22px; color: var(--muted); margin: 0 0 18px; line-height: 1.45; }
+.mail { background: #fff; border-radius: 12px; box-shadow: 0 18px 50px rgba(30, 24, 70, 0.18); overflow: hidden; width: 100%; max-height: 760px; }
+.mail-head { padding: 18px 24px 14px; border-bottom: 1px solid #e6e6ec; }
+.mail-subject { font-size: 21px; font-weight: 700; margin-bottom: 8px; }
+.mail-meta { font-size: 14px; color: var(--muted); line-height: 1.45; }
+.mail-body { margin: 0; padding: 18px 24px 22px; white-space: pre-wrap; font: 15.5px/1.5 var(--sans); color: #333; overflow: hidden; }
+.mails .mail-body { font-size: 14px; }
+.link { color: #1a56c4; text-decoration: underline; overflow-wrap: anywhere; }
+.cover { grid-template-columns: 300px 1fr; gap: 70px; align-items: center; background:
+         linear-gradient(135deg, #fff 0 55%, #f0eff8 55%); }
+.cover-logo { width: 300px; }
+.cover h1 { font-size: 96px; color: var(--navy); }
+.lead { font-size: 30px; line-height: 1.4; margin: 0 0 30px; }
+.note { font-size: 19px; color: var(--muted); border-left: 5px solid var(--ball); padding-left: 16px; }
+.divider { background: var(--navy); align-content: center; }
+.divider::after { background: var(--ball); }
+.divider .kicker { color: var(--ball); }
+.divider h1 { color: #fff; font-size: 104px; }
+.divider p { color: #d9d6ef; font-size: 30px; margin: 0; }
+.overview, .timeline { align-content: start; }
+.cards { display: grid; grid-template-columns: repeat(4, 1fr); gap: 22px; margin: 10px 0 34px; }
+.cards.three { grid-template-columns: repeat(3, 1fr); }
+.card { background: #fff; border-radius: 12px; padding: 24px 26px; border-top: 6px solid var(--navy); box-shadow: 0 8px 24px rgba(30, 24, 70, 0.08); }
+.card.dev { border-top-color: var(--ball); }
+.card h3 { font-family: var(--serif); font-size: 28px; margin: 0 0 10px; }
+.card p { font-size: 19px; line-height: 1.45; margin: 0; color: #3a3c40; }
+.wide li { font-size: 23px; }
+.steps { list-style: none; padding: 0; margin: 6px 0 24px; display: grid; gap: 12px; }
+.steps li { display: grid; grid-template-columns: 210px 1fr; gap: 24px; background: #fff; border-radius: 10px; padding: 14px 22px; margin: 0;
+            border-left: 6px solid var(--navy); font-size: 22px; }
+.steps b { color: var(--navy); }
+.nav { position: fixed; bottom: 22px; right: 22px; display: flex; gap: 8px; align-items: center; z-index: 5; font: 14px var(--sans); color: #fff;
+        background: rgba(29, 24, 64, 0.82); border-radius: 10px; padding: 5px 8px; }
+.nav button { background: rgba(255,255,255,0.12); color: #fff; border: 1px solid rgba(255,255,255,0.25); border-radius: 8px;
+              padding: 7px 13px; font: inherit; cursor: pointer; }
+.nav button:hover { background: rgba(255,255,255,0.22); }
+.nav button:focus-visible { outline: 2px solid var(--ball); }
+
+/* Phones and narrow windows: the slides become one scrolling page. */
+@media (max-width: 900px) {
+  html, body { overflow-x: hidden; }
+  .deck { position: static; display: block; }
+  .slide, .slide.active { position: relative; display: block; width: auto; height: auto; transform: none !important; top: auto; left: auto;
+                          padding: 36px 18px 44px; border-bottom: 1px solid #ddd; }
+  h1 { font-size: 46px; } .divider h1, .cover h1 { font-size: 52px; } h2 { font-size: 32px; }
+  li, .wide li, .card p, .sub { font-size: 17px; } .lead { font-size: 21px; } .divider p { font-size: 20px; }
+  .split .visual { display: block; margin-top: 18px; height: auto; }
+  .split.stacked .visual .pair, .cards, .cards.three { grid-template-columns: 1fr; }
+  .cover-logo { width: 140px; margin-bottom: 18px; }
+  .phone-row { flex-wrap: wrap; gap: 20px; } .phone { width: 46%; } .phone img { height: auto; }
+  .steps li { grid-template-columns: 1fr; gap: 4px; font-size: 17px; }
+  .nav { display: none; }
+  .slide { overflow-x: hidden; overflow-wrap: anywhere; } .mail { max-width: 100%; }
+}
+/* Printing (or "Save as PDF"): one slide per page. */
+@media print {
+  @page { size: 1600px 900px; margin: 0; }
+  html, body { background: var(--paper); }
+  .deck { position: static; display: block; }
+  .slide, .slide.active { display: grid; position: relative; transform: none !important; top: 0; left: 0; page-break-after: always; break-after: page; }
+  .nav { display: none; }
+}
+</style>
+</head>
+<body>
+<main class="deck">
+<section class="slide cover">
+  <img class="cover-logo" src="img/sta-logo.png" alt="Summit Tennis Association logo">
+  <div>
+    <div class="kicker">Summit Tennis Association</div>
+    <h1>STA Members App</h1>
+    <p class="lead">One place for club news, Sunday Doubles and Casual Play,<br>on any phone or computer.</p>
+    <p class="note">A tour for STA leadership. Every screen shown is the real app, filled with made-up players.</p>
+  </div>
+</section>
+<section class="slide overview">
+  <div class="kicker">What it does</div><h2>Everything members need, in one app</h2>
+  <div class="cards">
+    <div class="card"><h3>News</h3><p>Club announcements, posted by the organizers.</p></div>
+    <div class="card"><h3>Sunday Doubles</h3><p>Sign up each week, see your court, and review your game afterwards.</p></div>
+    <div class="card"><h3>Casual Play</h3><p>Post when you're free and get introduced to players at your level who are free too.</p></div>
+    <div class="card dev"><h3>Developers</h3><p>For organizers: members, the court Scheduler, emails and settings.</p></div>
+  </div>
+  <ul class="wide">
+    <li>Works in any web browser, on phones and computers. Nothing to install.</li>
+    <li>Members sign in with their email and a password. Only people on the member list can get in.</li>
+    <li>Reminders, court assignments and Casual Play introductions go out by email automatically.</li>
+    <li>Matches the look of statennis.com, with a link back to the club website.</li>
+  </ul>
+</section>
+<section class="slide divider">
+  <div class="kicker">Part 1</div><h1>For members</h1><p>What a member sees and does, week to week.</p>
+</section>
+<section class="slide split">
+  <div class="text"><div class="kicker">Members</div><h2>Signing in</h2><ul><li>Each member gets an invitation email and chooses a password.</li><li>Only members on the club list can get an account. There is no public sign-up.</li><li>"Forgot password" sends a reset link by email.</li></ul></div>
+  <div class="visual"><figure class="browser"><div class="bar"><i></i><i></i><i></i><span>agiusp.github.io/sta_members_app/app/</span></div>
+  <img src="img/m-signin.webp" alt="Sign-in page" loading="lazy"></figure></div>
+</section>
+<section class="slide split">
+  <div class="text"><div class="kicker">Members</div><h2>News</h2><ul><li>The first page after signing in.</li><li>Organizers post announcements; links to the club website are clickable.</li></ul></div>
+  <div class="visual"><figure class="browser"><div class="bar"><i></i><i></i><i></i><span>agiusp.github.io/sta_members_app/app/</span></div>
+  <img src="img/m-news.webp" alt="News page" loading="lazy"></figure></div>
+</section>
+<section class="slide split">
+  <div class="text"><div class="kicker">Sunday Doubles · email</div><h2>Every Monday: sign-ups open</h2><ul><li>At 9am Monday every member gets this email, with a link straight to the sign-up page.</li><li>It also asks last week's players to review their game.</li><li>The wording of every email can be changed by the organizers, in the app.</li></ul></div>
+  <div class="visual"><div class="mail">
+  <div class="mail-head">
+    <div class="mail-subject">Sunday Doubles, October 11: sign-ups are open</div>
+    <div class="mail-meta"><strong>STA - STA Members App</strong> &lt;noreply@mail.statennis.com&gt;<br>to alice.johnson@example.com</div>
+  </div>
+  <pre class="mail-body">Hello Sunday Doubles players
+
+Sign up below for the Sunday doubles match, October 11 at 9-10:30am
+
+<span class="link">https://agiusp.github.io/sta_members_app/app/signup.html</span>
+
+Thank you for playing last Sunday! Please take a minute to review your game (the sets you played, your partners and the scores) here:
+<span class="link">https://agiusp.github.io/sta_members_app/app/review.html</span>
+
+Deadline: Sign up or make changes by noon on Saturday.
+After that, contact dev@example.com
+
+What to know:
+* If you are suddenly unable to play after the signup cutoff of 12pm on Saturday, it is your responsibility to find a replacement from the wait list or from your own contacts
+* Court assignments and ball assignments go out by 8pm Saturday via email
+* The person designated with ball assignment must bring a new can of tennis balls
+* Please arrive on time and stay through the 90 minutes of play
+* A no-show or delay of 15 minutes or more without timely and reasonable explanation will be recorded as a “mischief” event. Two mischief events will result in indefinite suspension from the program for the season.</pre>
+</div></div>
+</section>
+<section class="slide split stacked">
+  <div class="text"><div class="kicker">Sunday Doubles</div><h2>Signing up for Sunday</h2><ul><li>One tap to sign up, one tap to cancel, until noon Saturday.</li><li>Spots go in the order people sign up. When the courts are full, later sign-ups join a waitlist.</li><li>Family members on one account are each signed up separately.</li></ul></div>
+  <div class="visual"><div class="pair"><figure class="browser"><div class="bar"><i></i><i></i><i></i><span>agiusp.github.io/sta_members_app/app/</span></div>
+  <img src="img/m-signup-before.webp" alt="Sign-up page before signing up" loading="lazy"></figure><figure class="browser"><div class="bar"><i></i><i></i><i></i><span>agiusp.github.io/sta_members_app/app/</span></div>
+  <img src="img/m-signup-after.webp" alt="After signing up" loading="lazy"></figure></div></div>
+</section>
+<section class="slide split">
+  <div class="text"><div class="kicker">Sunday Doubles · email</div><h2>Saturday 8pm: court assignments</h2><ul><li>Every player with a spot gets their court, their courtmates, and who brings the balls (*).</li><li>The waitlist is listed in order, so players who can't come can find a replacement.</li><li>Anyone left without a spot gets a friendly "no spot this week" email with their waitlist place.</li></ul></div>
+  <div class="visual"><div class="mail">
+  <div class="mail-head">
+    <div class="mail-subject">Sunday Doubles, October 11: court assignments</div>
+    <div class="mail-meta"><strong>STA - STA Members App</strong> &lt;noreply@mail.statennis.com&gt;<br>to alice.johnson@example.com</div>
+  </div>
+  <pre class="mail-body">Hello Sunday Doubles players
+
+Here are the court assignments for the Sunday doubles match, October 11 at 9-10:30am
+
+Court 1: David Kim*, Bob Smith, Carol Lee, Emma Brown
+Court 2: Frank Davis*, Grace Wilson, Henry Moore, Ivy Taylor
+Court 3: Jack Anderson*, Karen Thomas, Leo Martinez, Mia Garcia
+Court 4: Noah Robinson*, Olivia Clark, Paul Rodriguez, Quinn Lewis
+Court 5: Hugo Lambert*, Alice Johnson, Ryan Walker, Sara Hall
+
+* = bringing a new can of tennis balls for that court
+
+Wait list, in order: Gabe Stone, Finn Walsh, Eli Brooks
+
+You can also see the courts here: <span class="link">https://agiusp.github.io/sta_members_app/app/courts.html</span>
+
+What to know:
+* If you are suddenly unable to play, it is your responsibility to find a replacement from the wait list or from your own contacts, and to let dev@example.com know
+* The person designated with ball assignment must bring a new can of tennis balls
+* Please arrive on time and stay through the 90 minutes of play
+* A no-show or delay of 15 minutes or more without timely and reasonable explanation will be recorded as a “mischief” event. Two mischief events will result in indefinite suspension from the program for the season.</pre>
+</div></div>
+</section>
+<section class="slide split">
+  <div class="text"><div class="kicker">Sunday Doubles</div><h2>Court Assignments page</h2><ul><li>The same courts are on the app, from Saturday 8pm until play.</li><li>Shows names and ball-bringers only.</li></ul></div>
+  <div class="visual"><figure class="browser"><div class="bar"><i></i><i></i><i></i><span>agiusp.github.io/sta_members_app/app/</span></div>
+  <img src="img/m-courts.webp" alt="Court assignments page" loading="lazy"></figure></div>
+</section>
+<section class="slide split">
+  <div class="text"><div class="kicker">Sunday Doubles</div><h2>Game Review</h2><ul><li>After play, each player can record the sets they played, their partner in each set, and the scores.</li><li>Opponents are filled in automatically from the court.</li><li>"Rate my game" asks how much they enjoyed it, with optional comments.</li><li>Players see only their own reviews; organizers see all of them.</li></ul></div>
+  <div class="visual"><figure class="browser"><div class="bar"><i></i><i></i><i></i><span>agiusp.github.io/sta_members_app/app/</span></div>
+  <img src="img/m-review.webp" alt="Game review form" loading="lazy"></figure></div>
+</section>
+<section class="slide split">
+  <div class="text"><div class="kicker">Casual Play</div><h2>Casual Play: who's free?</h2><ul><li>A calendar of the next 4 weeks, 6am to 9pm, showing when other members want to play.</li><li>Members choose the 1 or 2 levels they want to see. Darker purple means more players are free.</li><li>Members choose whether to show their name. Others always see sex and level.</li></ul></div>
+  <div class="visual"><figure class="browser"><div class="bar"><i></i><i></i><i></i><span>agiusp.github.io/sta_members_app/app/</span></div>
+  <img src="img/m-casual.webp" alt="Casual Play calendar" loading="lazy"></figure></div>
+</section>
+<section class="slide split">
+  <div class="text"><div class="kicker">Casual Play</div><h2>Hover to see who</h2><ul><li>Hovering over a time shows each player who is free then: name (if shown), sex, level, and whether they want singles or doubles.</li></ul></div>
+  <div class="visual"><figure class="browser"><div class="bar"><i></i><i></i><i></i><span>agiusp.github.io/sta_members_app/app/</span></div>
+  <img src="img/m-casual-hover.webp" alt="Hovering over a time on the calendar" loading="lazy"></figure></div>
+</section>
+<section class="slide split">
+  <div class="text"><div class="kicker">Casual Play</div><h2>Posting a time</h2><ul><li>Click any hour or half hour for a 1-hour box; stretch it to 1.5 or 2 hours.</li><li>Choose Singles, Doubles or Either, and whether to show your name for this time.</li><li>The panel shows who else is already free then.</li></ul></div>
+  <div class="visual"><figure class="browser"><div class="bar"><i></i><i></i><i></i><span>agiusp.github.io/sta_members_app/app/</span></div>
+  <img src="img/m-casual-post.webp" alt="Posting a time" loading="lazy"></figure></div>
+</section>
+<section class="slide split">
+  <div class="text"><div class="kicker">Casual Play</div><h2>Your time, and who lines up</h2><ul><li>Clicking one of your times shows every player whose time lines up with it: at least an hour together, at levels that suit both, wanting the same kind of game.</li><li>Unsubmit takes the time back, for example once a game is set up.</li></ul></div>
+  <div class="visual"><figure class="browser"><div class="bar"><i></i><i></i><i></i><span>agiusp.github.io/sta_members_app/app/</span></div>
+  <img src="img/m-casual-mine.webp" alt="Your own time with players who line up" loading="lazy"></figure></div>
+</section>
+<section class="slide split stacked">
+  <div class="text"><div class="kicker">Casual Play · email</div><h2>Casual Play introductions by email</h2><ul><li>When times line up, each player gets the others' names and email addresses, and they decide together who plays.</li><li>Players who hide their name are asked to show it first, so nobody's details are shared without their say-so.</li><li>Members choose whether to get these emails at all.</li></ul></div>
+  <div class="visual"><div class="pair mails"><div class="mail">
+  <div class="mail-head">
+    <div class="mail-subject">Casual Play: players free Saturday, October 10, 9:00 – 11:00 AM</div>
+    <div class="mail-meta"><strong>STA - STA Members App</strong> &lt;noreply@mail.statennis.com&gt;<br>to alice.johnson@example.com</div>
+  </div>
+  <pre class="mail-body">Hello Alice,
+
+Good news: other players are free at the same time as you on Saturday, October 10, 9:00 – 11:00 AM (singles or doubles), at levels that suit you:
+
+Bob Smith (M, 3.5) bob.smith@example.com: free 9:00 – 10:30 AM, singles or doubles
+Henry Moore (M, 3.5) henry.moore@example.com: free 10:00 – 11:00 AM, singles
+
+1 more player lines up but hasn&#x27;t shown their name yet. We&#x27;ve asked them to.
+
+Get in touch with each other (reply-all works if you copy the addresses above) to decide who plays: a singles game, or a doubles game if there are four of you (you can also invite a fourth player). Then book a court.
+
+If more players line up with your time, we&#x27;ll email you again.
+
+Once you&#x27;ve set up a game, please remove this time from the Casual Play calendar (click your time, then Unsubmit), so other players no longer see you as available then:
+<span class="link">https://agiusp.github.io/sta_members_app/app/casual.html?slot=1</span></pre>
+</div><div class="mail">
+  <div class="mail-head">
+    <div class="mail-subject">Casual Play: players free Saturday, October 10, 8:30 – 10:30 AM – show your name to meet them</div>
+    <div class="mail-meta"><strong>STA - STA Members App</strong> &lt;noreply@mail.statennis.com&gt;<br>to grace.wilson@example.com</div>
+  </div>
+  <pre class="mail-body">Hello Grace,
+
+Other players are free at the same time as you on Saturday, October 10, 8:30 – 10:30 AM (doubles), at levels that suit you:
+
+Alice Johnson (F, 3.5): free 9:00 – 10:30 AM, singles or doubles
+Bob Smith (M, 3.5): free 9:00 – 10:30 AM, singles or doubles
+
+Your name is hidden for that time, so they don&#x27;t know about you yet. To get their names and email addresses, and to let them know about you, turn on &quot;Show my name&quot; for that time:
+<span class="link">https://agiusp.github.io/sta_members_app/app/casual.html?slot=4</span></pre>
+</div></div></div>
+</section>
+<section class="slide phones">
+  <div class="kicker">Members</div><h2>Made for phones</h2>
+  <p class="sub">The same app on a phone: no download, just the web address. Add it to the home screen like an app.</p>
+  <div class="phone-row">
+    <figure class="phone"><img src="img/p-news.webp" alt="News on a phone" loading="lazy"></figure>
+    <figure class="phone"><img src="img/p-signup.webp" alt="Sign-up on a phone" loading="lazy"></figure>
+    <figure class="phone"><img src="img/p-courts.webp" alt="Court assignments on a phone" loading="lazy"></figure>
+    <figure class="phone"><img src="img/p-casual-mine.webp" alt="Casual Play on a phone" loading="lazy"></figure>
+  </div>
+</section>
+<section class="slide divider">
+  <div class="kicker">Part 2</div><h1>For developers</h1><p>The organizers' tools: members, the weekly Scheduler, emails and settings.</p>
+</section>
+<section class="slide split">
+  <div class="text"><div class="kicker">Developers</div><h2>Two-step sign-in</h2><ul><li>Developer pages can change everyone's data, so they need a 6-digit code from an authenticator app on the developer's phone, as well as the password.</li><li>Set up once by scanning a code. Members are not affected.</li></ul></div>
+  <div class="visual"><figure class="browser"><div class="bar"><i></i><i></i><i></i><span>agiusp.github.io/sta_members_app/app/</span></div>
+  <img src="img/d-twostep.webp" alt="Two-step sign-in setup" loading="lazy"></figure></div>
+</section>
+<section class="slide split">
+  <div class="text"><div class="kicker">Developers · Members and this week</div><h2>This week at a glance</h2><ul><li>The Developers area opens on the current Sunday: sign-up and lock deadlines, and when each email goes out.</li><li>The number of courts can be changed for the week.</li></ul></div>
+  <div class="visual"><figure class="browser"><div class="bar"><i></i><i></i><i></i><span>agiusp.github.io/sta_members_app/app/</span></div>
+  <img src="img/d-overview.webp" alt="Members and this week" loading="lazy"></figure></div>
+</section>
+<section class="slide split">
+  <div class="text"><div class="kicker">Developers · Members and this week</div><h2>This week's line-up</h2><ul><li>Everyone who signed up, in order, with spots and waitlist.</li><li>A developer can remove a player if needed (recorded as a developer removal).</li></ul></div>
+  <div class="visual"><figure class="browser"><div class="bar"><i></i><i></i><i></i><span>agiusp.github.io/sta_members_app/app/</span></div>
+  <img src="img/d-lineup.webp" alt="This week&#x27;s line-up" loading="lazy"></figure></div>
+</section>
+<section class="slide split">
+  <div class="text"><div class="kicker">Developers · Members and this week</div><h2>Members</h2><ul><li>Add members (an account can hold several family members), invite them, or invite everyone not yet invited in one click.</li><li>See who has an account, whose membership is current, and who the developers are.</li></ul></div>
+  <div class="visual"><figure class="browser"><div class="bar"><i></i><i></i><i></i><span>agiusp.github.io/sta_members_app/app/</span></div>
+  <img src="img/d-members.webp" alt="Members list" loading="lazy"></figure></div>
+</section>
+<section class="slide split">
+  <div class="text"><div class="kicker">Developers · Members and this week</div><h2>Upload the current member list</h2><ul><li>Upload the club's membership export (CSV). Members are matched by email or name.</li><li>The app shows exactly what will change before anything happens. Members not on the list are marked lapsed and can't sign up until dues are paid.</li></ul></div>
+  <div class="visual"><figure class="browser"><div class="bar"><i></i><i></i><i></i><span>agiusp.github.io/sta_members_app/app/</span></div>
+  <img src="img/d-member-upload.webp" alt="Uploading the current member list" loading="lazy"></figure></div>
+</section>
+<section class="slide split">
+  <div class="text"><div class="kicker">Developers · Scheduler</div><h2>Auto-Assign Courts</h2><ul><li>Saturday at noon sign-ups close and the developers get a reminder to arrange the courts.</li><li>One click arranges everyone with a spot onto courts: same-sex, mixed, or by level.</li><li>Each court is checked (OK or Needs fix). Players can be swapped by tapping two names.</li><li>It warns about groups that played together recently.</li></ul></div>
+  <div class="visual"><figure class="browser"><div class="bar"><i></i><i></i><i></i><span>agiusp.github.io/sta_members_app/app/</span></div>
+  <img src="img/d-sched-courts.webp" alt="Courts after auto-assign" loading="lazy"></figure></div>
+</section>
+<section class="slide split">
+  <div class="text"><div class="kicker">Developers · Scheduler</div><h2>Who brings the balls</h2><ul><li>Ball-bringers are chosen fairly, from this season's history.</li><li>"Modify bring-ball assignments" shows a star for each time a player brought balls this season; red if they brought them last Sunday, pink the Sunday before. Tap a player to choose them instead.</li></ul></div>
+  <div class="visual"><figure class="browser"><div class="bar"><i></i><i></i><i></i><span>agiusp.github.io/sta_members_app/app/</span></div>
+  <img src="img/d-sched-balls.webp" alt="Modifying bring-ball assignments" loading="lazy"></figure></div>
+</section>
+<section class="slide split">
+  <div class="text"><div class="kicker">Developers · Scheduler</div><h2>Lock, and the app does the rest</h2><ul><li>Locking the courts schedules the 8pm emails to every player. They can still be unlocked and changed until then.</li><li>If rain is expected, choose a weather option instead and everyone signed up is told.</li><li>If nobody locks in time, the developers are alerted and no wrong emails go out.</li></ul></div>
+  <div class="visual"><figure class="browser"><div class="bar"><i></i><i></i><i></i><span>agiusp.github.io/sta_members_app/app/</span></div>
+  <img src="img/d-sched-locked.webp" alt="Courts locked" loading="lazy"></figure></div>
+</section>
+<section class="slide split stacked">
+  <div class="text"><div class="kicker">Developers · Scheduler</div><h2>Upload my players</h2><ul><li>The same Scheduler works for any group, not just Sunday Doubles: paste names, levels and sexes, or upload a file.</li><li>Auto-assign, swaps, ball-bringers, then copy or print the courts.</li></ul></div>
+  <div class="visual"><div class="pair"><figure class="browser"><div class="bar"><i></i><i></i><i></i><span>agiusp.github.io/sta_members_app/app/</span></div>
+  <img src="img/d-upload-players.webp" alt="Pasting a list of players" loading="lazy"></figure><figure class="browser"><div class="bar"><i></i><i></i><i></i><span>agiusp.github.io/sta_members_app/app/</span></div>
+  <img src="img/d-upload-courts.webp" alt="Courts for uploaded players" loading="lazy"></figure></div></div>
+</section>
+<section class="slide split stacked">
+  <div class="text"><div class="kicker">Developers · Emails, schedule and settings</div><h2>Emails, schedule and settings</h2><ul><li>App name, color, logo and club website.</li><li>The day and time of every deadline and email, with on/off switches for the optional reminders.</li></ul></div>
+  <div class="visual"><div class="pair"><figure class="browser"><div class="bar"><i></i><i></i><i></i><span>agiusp.github.io/sta_members_app/app/</span></div>
+  <img src="img/d-settings.webp" alt="Settings" loading="lazy"></figure><figure class="browser"><div class="bar"><i></i><i></i><i></i><span>agiusp.github.io/sta_members_app/app/</span></div>
+  <img src="img/d-schedule.webp" alt="Schedule" loading="lazy"></figure></div></div>
+</section>
+<section class="slide split">
+  <div class="text"><div class="kicker">Developers · Emails, schedule and settings</div><h2>Every email is editable</h2><ul><li>Each email shows when it is sent and to whom.</li><li>Change the wording, preview it with sample details, or reset to the original. All emails can be printed as one document for review.</li></ul></div>
+  <div class="visual"><figure class="browser"><div class="bar"><i></i><i></i><i></i><span>agiusp.github.io/sta_members_app/app/</span></div>
+  <img src="img/d-email-edit.webp" alt="Editing an email" loading="lazy"></figure></div>
+</section>
+<section class="slide split">
+  <div class="text"><div class="kicker">Developers</div><h2>Posting news</h2><ul><li>Developers post, edit and delete News announcements right on the News page.</li></ul></div>
+  <div class="visual"><figure class="browser"><div class="bar"><i></i><i></i><i></i><span>agiusp.github.io/sta_members_app/app/</span></div>
+  <img src="img/d-news.webp" alt="Posting news" loading="lazy"></figure></div>
+</section>
+<section class="slide timeline">
+  <div class="kicker">How a week runs</div><h2>The Sunday Doubles week, automatically</h2>
+  <ol class="steps">
+    <li><b>Mon 9:00am</b><span>Sign-ups open; every member gets the invite email.</span></li>
+    <li><b>Mon–Sat</b><span>Members sign up or cancel. The waitlist moves up automatically, with an email to anyone who gets a spot.</span></li>
+    <li><b>Sat 12:00pm</b><span>Sign-ups close. Developers are reminded to run the Scheduler.</span></li>
+    <li><b>Sat afternoon</b><span>A developer arranges and locks the courts (reminders at 4pm and 7pm if not yet done).</span></li>
+    <li><b>Sat 8:00pm</b><span>Court emails to every player, "no spot" emails to the waitlist; the Court Assignments page opens.</span></li>
+    <li><b>Sun 9–10:30am</b><span>Play.</span></li>
+    <li><b>After play</b><span>Players review their game until the next Sunday.</span></li>
+  </ol>
+  <p class="sub">All times can be changed in the app. Casual Play runs all year, with emails as soon as times line up.</p>
+</section>
+<section class="slide overview">
+  <div class="kicker">Privacy and security</div><h2>Built to keep members' details safe</h2>
+  <ul class="wide">
+    <li>Only invited members can sign in. Each member sees only what they need: other players' names on the courts, and on Casual Play only what each player chooses to show.</li>
+    <li>Email addresses are shared only between Casual Play players who both chose to show their name.</li>
+    <li>The rules are enforced by the database itself, not just the pages, and have been through a security review.</li>
+    <li>Developers need two-step sign-in. Passwords are handled by a professional sign-in service (Supabase) and stored only in scrambled form.</li>
+    <li>We collect only name, email, level, sex and play history. The invite email explains what is stored and how to ask for removal.</li>
+  </ul>
+</section>
+<section class="slide overview">
+  <div class="kicker">Next steps</div><h2>What it takes to go live</h2>
+  <div class="cards three">
+    <div class="card"><h3>Email from statennis.com</h3><p>The club's Wix administrator adds 3–4 email records, about 15 minutes, so emails come from <b>mail.statennis.com</b> and don't land in spam. The website and club email are untouched.</p></div>
+    <div class="card"><h3>Running costs</h3><p>Free to start: hosting, database and email all have free plans. An optional $25/month database plan adds automatic daily backups.</p></div>
+    <div class="card"><h3>Roll-out</h3><p>Load the member list, invite a few members to try it, then invite everyone. Volunteers run it from the Developers pages; no programming needed week to week.</p></div>
+  </div>
+  <p class="sub">Try it yourself: <b>https://agiusp.github.io/sta_members_app/app/</b><br>Ask for the demo sign-in details. All players in the demo are made up.</p>
+</section>
+</main>
+<div class="nav" aria-label="Slide controls"><button id="prev" aria-label="Previous slide">&larr;</button><span id="count"></span><button id="next" aria-label="Next slide">&rarr;</button></div>
+<script>
+(function () {
+  const slides = [...document.querySelectorAll('.slide')];
+  const count = document.getElementById('count');
+  let i = Math.max(0, Math.min(slides.length - 1, (parseInt(location.hash.slice(1), 10) || 1) - 1));
+  function fit() {
+    const s = Math.min(window.innerWidth / 1600, window.innerHeight / 900);
+    slides.forEach(el => { el.style.transform = `translate(-50%, -50%) scale(${s})`; });
+  }
+  function show(n) {
+    i = Math.max(0, Math.min(slides.length - 1, n));
+    slides.forEach((el, k) => el.classList.toggle('active', k === i));
+    count.textContent = `${i + 1} / ${slides.length}`;
+    history.replaceState(null, '', '#' + (i + 1));
+  }
+  document.getElementById('prev').addEventListener('click', () => show(i - 1));
+  document.getElementById('next').addEventListener('click', () => show(i + 1));
+  document.addEventListener('keydown', e => {
+    if (['ArrowRight', 'PageDown', ' '].includes(e.key)) { e.preventDefault(); show(i + 1); }
+    if (['ArrowLeft', 'PageUp'].includes(e.key)) { e.preventDefault(); show(i - 1); }
+    if (e.key === 'Home') show(0);
+    if (e.key === 'End') show(slides.length - 1);
+  });
+  let x0 = null;
+  document.addEventListener('touchstart', e => { x0 = e.touches[0].clientX; }, { passive: true });
+  document.addEventListener('touchend', e => {
+    if (x0 === null || window.innerWidth <= 900) return;
+    const dx = e.changedTouches[0].clientX - x0; x0 = null;
+    if (Math.abs(dx) > 50) show(i + (dx < 0 ? 1 : -1));
+  });
+  window.addEventListener('resize', fit);
+  fit(); show(i);
+})();
+</script>
+</body>
+</html>

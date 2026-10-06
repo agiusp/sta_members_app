@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>STA Review my Game</title>
+<title>Game Review</title>
 <link rel="stylesheet" href="styles.css">
 <style>
   .set-row { border-top: 1px solid #eceef1; padding: 12px 0; }
@@ -29,22 +29,16 @@
   .my-comments { white-space: pre-wrap; background: #f7f8fa; border: 1px solid #e2e5e9; border-radius: 6px; padding: 10px; margin-top: 6px; font-size: 14px; }
 </style>
 </head>
-<body>
+<body data-page="Game Review" data-section="sunday" data-tab="review">
 
-<header>
-  <h1>Review my Game</h1>
-  <div class="who">
-    <a href="./">Sign-up page</a>
-    <a href="courts.html">Designated Courts</a>
-  </div>
-</header>
-
+<main class="page">
 <div class="test-banner" id="testBanner" hidden></div>
 
 <section class="panel">
   <div id="body"><p class="muted">Loading…</p></div>
   <div id="msg"></div>
 </section>
+</main>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/dist/umd/supabase.js"
         integrity="sha384-Rj26LVGvoeRVR6+mwQmFfcR3QOBEwT+ZmuCWpuiqeTzJpCs0ER4ITAWGb4Hiy3Ok"
@@ -53,13 +47,12 @@
 <script src="common.js"></script>
 <script>
 (function () {
-  const { client, esc, rpc, fmtDateTime, fmtPlayDate, showMessage } = STA;
+  const { esc, rpc, fmtDateTime, fmtPlayDate, showMessage } = STA;
   const $ = id => document.getElementById(id);
   let data = null, playerId = null, editing = false;
 
   async function start() {
-    const { data: { session } } = await client.auth.getSession();
-    if (!session) { location.href = './'; return; }
+    if (!(await STA.initPage())) return;
     await load();
   }
 

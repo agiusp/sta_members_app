@@ -1,6 +1,6 @@
 // Sends a member their setup-invite so they can set a password. Supabase
 // makes the personal link; the email itself uses the app's editable wording
-// (Developer area > Emails and schedule). Only developers may call it, and
+// (Developers > Emails, schedule and settings). Only developers may call it, and
 // only for current members already in the accounts table, so nobody outside
 // the member list can get an account.
 import { createClient } from "npm:@supabase/supabase-js@2.117.2";
@@ -58,16 +58,18 @@ Deno.serve(async (req) => {
 
   const [{ data: names }, { data: settings }] = await Promise.all([
     admin.rpc("account_player_names", { p_email: cleanEmail }),
-    admin.from("settings").select("contact_emails").maybeSingle(),
+    admin.from("settings").select("contact_emails, program_name").maybeSingle(),
   ]);
+  const programName = settings?.program_name ?? "STA - STA Members App";
   const message = render(await loadTemplates(admin), "setup_invite", {
+    program_name: programName,
     player_names: names ?? cleanEmail,
     link: link.properties.action_link,
     contacts: contactsLabel(settings?.contact_emails ?? []),
   });
   let sendError: string | null = null;
   try {
-    await sendEmail(cleanEmail, message.subject, message.text);
+    await sendEmail(cleanEmail, message.subject, message.text, programName);
   } catch (e) {
     sendError = String(e instanceof Error ? e.message : e);
   }
