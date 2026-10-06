@@ -414,3 +414,13 @@ enabled = true
 # formatted with uppercase keywords, indent 2, max width 180, trailing commas,
 # and column/key alignment. Set to "null" to emit raw, unformatted SQL.
 # format_options = "{\"keywordCase\":\"upper\",\"indent\":2,\"maxWidth\":180,\"commaStyle\":\"trailing\"}"
+
+# The temporary online demo (made-up players only). Its other settings are
+# the ones above: no public sign-up, two-step codes, 24-hour email links.
+# Push with: supabase config push --project-ref cztevomhnflvzglrqvfg
+[remotes.demo]
+project_id = "cztevomhnflvzglrqvfg"
+
+[remotes.demo.auth]
+site_url = "https://agiusp.github.io/sta_members_app/app/"
+additional_redirect_urls = ["https://agiusp.github.io/sta_members_app/app/"]

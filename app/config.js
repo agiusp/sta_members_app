@@ -5,4 +5,4 @@
 // can see. Never put a secret or service role key here.
 window.STA_CONFIG = ['127.0.0.1', 'localhost'].includes(location.hostname)
   ? { supabaseUrl: 'http://127.0.0.1:54321', publishableKey: 'sb_publishable_ACJWlzQHlZjBrEguHvfOxg_3BJgxAaH' }
-  : { supabaseUrl: 'ONLINE_SUPABASE_URL', publishableKey: 'ONLINE_PUBLISHABLE_KEY' };
+  : { supabaseUrl: 'https://cztevomhnflvzglrqvfg.supabase.co', publishableKey: 'sb_publishable_nCGiFJ-uJSPVdGkg_0hjeQ_cpDjlvlI' };

@@ -130,7 +130,16 @@ Deno.serve(async (req) => {
   const url = Deno.env.get("SUPABASE_URL")!;
   const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
   const auth = req.headers.get("Authorization") ?? "";
+  // The scheduler (or a test) calls with the service role key. Online, the
+  // key it holds may be in a different format from this function's copy, so
+  // also accept any key that can read a table only the service role can.
   let allowed = auth === `Bearer ${serviceKey}`;
+  if (!allowed && auth.startsWith("Bearer ")) {
+    const token = auth.slice(7);
+    const probe = createClient(url, token, { auth: { persistSession: false } });
+    const { error } = await probe.from("email_switches").select("key").limit(1);
+    allowed = !error;
+  }
   if (!allowed) {
     const caller = createClient(url, Deno.env.get("SUPABASE_ANON_KEY")!, {
       global: { headers: { Authorization: auth } },

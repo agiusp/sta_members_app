@@ -26,7 +26,7 @@ cd "$copy"
 # Own project name and ports (543xx -> 546xx); no test data from seed.sql;
 # links in emails point to the online demo's address.
 sed -i '' \
-  -e 's/^project_id = .*/project_id = "sta_members_app_demo"/' \
+  -e '1,/^project_id = /s/^project_id = .*/project_id = "sta_members_app_demo"/' \
   -e 's/^\(port = \)543\([0-9][0-9]\)$/\1546\2/' \
   -e 's/^shadow_port = 54320$/shadow_port = 54620/' \
   -e 's/^inspector_port = 8083$/inspector_port = 8383/' \

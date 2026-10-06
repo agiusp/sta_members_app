@@ -17,7 +17,7 @@ cd "$copy"
 
 # Own project name and ports (543xx -> 544xx), so it runs beside the main copy.
 sed -i '' \
-  -e 's/^project_id = .*/project_id = "sta_members_app_test"/' \
+  -e '1,/^project_id = /s/^project_id = .*/project_id = "sta_members_app_test"/' \
   -e 's/^\(port = \)543\([0-9][0-9]\)$/\1544\2/' \
   -e 's/^shadow_port = 54320$/shadow_port = 54420/' \
   -e 's/^inspector_port = 8083$/inspector_port = 8183/' \
