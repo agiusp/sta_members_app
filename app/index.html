@@ -63,7 +63,7 @@
     if (STA.authLinkError) {
       await STA.initPage({ requireSignIn: false });
       show('signInView');
-      showMessage($('signInMsg'), `That link didn't work (${STA.authLinkError}). Email links work once and expire after 24 hours. If this was an invite, ask a developer to resend it. If you already have a password, sign in below or use "Forgot password?".`);
+      showMessage($('signInMsg'), STA.msgText('link_failed', { reason: STA.authLinkError }));
       history.replaceState(null, '', location.pathname);
       return;
     }
@@ -88,7 +88,7 @@
     });
     if (error) {
       // Same message whether or not the email is a member.
-      showMessage($('signInMsg'), 'Email or password is incorrect.');
+      showMessage($('signInMsg'), STA.msgText('signin_wrong'));
       return;
     }
     location.replace(nextPage());
@@ -99,7 +99,7 @@
     if (!email) { showMessage($('signInMsg'), 'Enter your email above first, then click "Forgot password?" again.'); return; }
     await client.auth.resetPasswordForEmail(email, { redirectTo: new URL('./', location.href).href });
     // Same message whether or not the email has an account.
-    showMessage($('signInMsg'), 'If that email belongs to a member, a password reset link is on its way.', 'ok');
+    showMessage($('signInMsg'), STA.msgText('reset_sent'), 'ok');
   });
 
   $('setPasswordForm').addEventListener('submit', async e => {

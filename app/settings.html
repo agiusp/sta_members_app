@@ -36,6 +36,9 @@
   .seg button + button { border-left: 1px solid var(--accent); }
   .seg button.active { background: var(--accent); color: #fff; }
   .seg.small button { min-height: 32px; padding: 5px 13px; font-size: 13px; }
+  .msg-group { font-family: var(--serif); font-size: 20px; margin: 22px 0 6px; }
+  .msg-group:first-child { margin-top: 4px; }
+  .email-card textarea.message { min-height: 64px; width: 100%; font: inherit; font-size: 14px; padding: 8px 9px; border: 1px solid #cbd2d9; border-radius: 6px; color: var(--ink); }
   .email-card .head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; flex-wrap: wrap; }
   .email-card label.switch { flex-direction: row; align-items: center; gap: 8px; font-size: 14px; font-weight: 600; color: var(--ink); cursor: pointer; white-space: nowrap; }
   .email-card label.switch input { width: 18px; height: 18px; margin: 0; }
@@ -60,6 +63,7 @@
     <button data-pane="app">App settings</button>
     <button data-pane="sunday">Sunday Doubles Settings</button>
     <button data-pane="casual">Casual Play Settings</button>
+    <button data-pane="messages">App Messages</button>
   </div>
 
   <!-- App settings -->
@@ -95,17 +99,6 @@
   </section>
 
   <section class="panel">
-    <div class="panel-title">Message for Inactive members</div>
-    <p class="muted">Inactive members can still sign in, but see only this message until a developer marks them Active again (Developers &gt; Members).</p>
-    <div class="row">
-      <label style="flex:1; min-width:240px">Message
-        <textarea id="duesInput" rows="3" style="font:inherit;font-size:14px;padding:8px 9px;border:1px solid #cbd2d9;border-radius:6px"></textarea></label>
-      <button id="duesSaveBtn">Save</button>
-    </div>
-    <div id="duesMsg"></div>
-  </section>
-
-  <section class="panel">
     <div class="panel-title">Invitation email</div>
     <p class="muted">Sent when a developer clicks Send Invite in the Members table. It can't be switched off: it's how members join the app.</p>
     <div class="email-list" data-group="app"></div>
@@ -136,6 +129,17 @@
       Words in {{double braces}} are filled in when the email is sent; each email lists the ones it can use.
       Your edits are used from the next email onwards. <em>Reset to default</em> brings back the original wording.</p>
     <div class="email-list" data-group="sunday"></div>
+  </section>
+  </div>
+
+  <!-- App Messages -->
+  <div data-pane-body="messages" hidden>
+  <section class="panel">
+    <div class="panel-title">App Messages</div>
+    <p class="muted">The messages members see on the app's pages. Change the wording and click Save; members see it the next time they load a page.
+      Words in {{double braces}} are filled in when the message is shown. <em>Reset to default</em> brings back the original wording.
+      (Emails are edited in Sunday Doubles Settings and Casual Play Settings.)</p>
+    <div id="messageList"></div>
   </section>
   </div>
 
@@ -214,10 +218,11 @@
     myEmail = session.user.email;
     if (!(await rpc('is_developer'))) { showMessage($('guardMsg'), 'This area is for developers only.'); return; }
     await loadBranding();
-    await Promise.all([load(), loadDues(), loadCasual()]);
+    await Promise.all([load(), loadCasual()]);
+    renderMessages();
     $('editView').hidden = false;
     const [pane, sub] = location.hash.slice(1).split('-');
-    showPane(['app', 'sunday', 'casual'].includes(pane) ? pane : 'app', sub === 'email' ? 'email' : 'time');
+    showPane(['app', 'sunday', 'casual', 'messages'].includes(pane) ? pane : 'app', sub === 'email' ? 'email' : 'time');
   }
 
   async function load() {
@@ -244,16 +249,47 @@
   $('paneTabs').addEventListener('click', e => { const b = e.target.closest('[data-pane]'); if (b) showPane(b.dataset.pane); });
   $('sundayTabs').addEventListener('click', e => { const b = e.target.closest('[data-sub]'); if (b) showPane('sunday', b.dataset.sub); });
 
-  // ---------- Message for Inactive members ----------
-  async function loadDues() {
-    const { data } = await client.from('settings').select('dues_message').maybeSingle();
-    $('duesInput').value = data ? data.dues_message : '';
+  // ---------- App Messages ----------
+  function renderMessages() {
+    const edits = STA.messageEdits();
+    const groups = [...new Set(STA.MESSAGES.map(m => m.group))];
+    $('messageList').innerHTML = groups.map(g => `<h3 class="msg-group">${esc(g)}</h3>` + STA.MESSAGES.filter(m => m.group === g).map(m => {
+      const edited = m.key in edits;
+      return `<div class="email-card" data-msg="${m.key}">
+        <div class="head"><h3>${esc(m.name)} ${edited ? '<span class="badge wait">Edited</span>' : '<span class="badge none">Default wording</span>'}</h3></div>
+        <div class="meta"><strong>Shown:</strong> ${esc(m.where)}</div>
+        <label>Message <textarea class="message" rows="3">${esc(edited ? edits[m.key] : m.text)}</textarea></label>
+        ${m.placeholders ? `<div class="placeholders">Can use: ${Object.entries(m.placeholders).map(([n, what]) =>
+          `<code>{{${esc(n)}}}</code> ${esc(what)}`).join(' · ')}</div>` : ''}
+        <div class="row" style="margin-top:8px">
+          <button data-msg-act="save">Save</button>
+          ${edited ? '<button class="danger" data-msg-act="reset">Reset to default</button>' : ''}
+        </div>
+        <div class="msg-slot"></div>
+      </div>`;
+    }).join('')).join('');
   }
-  $('duesSaveBtn').addEventListener('click', async () => {
-    const text = $('duesInput').value.trim();
-    if (!text) { showMessage($('duesMsg'), 'The message cannot be empty.'); return; }
-    const { error } = await client.from('settings').update({ dues_message: text }).eq('id', true);
-    showMessage($('duesMsg'), error ? error.message : 'Message saved.', error ? 'error' : 'ok');
+
+  $('messageList').addEventListener('click', async ev => {
+    const btn = ev.target.closest('button[data-msg-act]');
+    if (!btn) return;
+    const card = btn.closest('[data-msg]');
+    const m = STA.MESSAGES.find(x => x.key === card.dataset.msg);
+    const text = card.querySelector('textarea').value;
+    const slot = card.querySelector('.msg-slot');
+    if (btn.dataset.msgAct === 'save') {
+      if (!text.trim()) { showMessage(slot, 'The message cannot be empty. Use Reset to default to go back to the original.'); return; }
+      const unknown = [...new Set([...text.matchAll(/\{\{\s*(\w+)\s*\}\}/g)].map(x => x[1]))].filter(n => !(m.placeholders && n in m.placeholders));
+      if (unknown.length && !confirm(`Unknown: ${unknown.map(n => `{{${n}}}`).join(', ')} (it would be shown as typed).\n\nSave anyway?`)) return;
+    } else if (!confirm(`Go back to the original wording for "${m.name}"?`)) return;
+    try {
+      const edits = await rpc('dev_save_app_message', { p_key: m.key, p_text: btn.dataset.msgAct === 'save' ? text : null });
+      Object.keys(STA.messageEdits()).forEach(k => delete STA.messageEdits()[k]);
+      Object.assign(STA.messageEdits(), edits);
+      renderMessages();
+      showMessage(document.querySelector(`[data-msg="${m.key}"] .msg-slot`),
+        btn.dataset.msgAct === 'save' ? 'Saved. Members see it the next time they load a page.' : 'Back to the default wording.', 'ok');
+    } catch (err) { showMessage(slot, err.message); }
   });
 
   // ---------- Casual Play: wait before emailing ----------

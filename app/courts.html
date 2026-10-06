@@ -63,12 +63,12 @@
     $('testBanner').hidden = !d.test_mode;
     $('testBanner').textContent = `Test mode: the app is pretending it's ${fmtDateTime(d.now)}.`;
 
-    if (!d.session) { $('body').innerHTML = '<p class="muted">No Sunday session is scheduled right now.</p>'; return; }
+    if (!d.session) { $('body').innerHTML = `<p class="muted">${STA.msg('no_session')}</p>`; return; }
     const title = `<h2>${esc(fmtPlayDate(d.session.play_date))}, 9–10:30am</h2>`;
     if (!d.ready) {
       $('body').innerHTML = title + (d.not_locked
-        ? "<p>Court assignments haven't been posted yet. They'll appear here, and be sent by email, as soon as they are.</p>"
-        : `<p>Court assignments will be posted here, and sent by email, at <strong>${esc(fmtDateTime(d.session.courts_publish_at))}</strong>.</p>`);
+        ? `<p>${STA.msg('courts_not_locked')}</p>`
+        : `<p>${STA.msg('courts_later', { publish_time: `<strong>${esc(fmtDateTime(d.session.courts_publish_at))}</strong>` })}</p>`);
       return;
     }
     const contacts = (d.contact_emails || []).map(e => `<a href="mailto:${esc(e)}">${esc(e)}</a>`).join(' and/or ');
@@ -76,13 +76,13 @@
     const day = todayEastern === d.session.play_date ? 'today' : 'tomorrow';
     if (d.week_mode === 'rain_expected') {
       $('body').innerHTML = title + `<p><strong>Rain-out expected: no courts have been assigned.</strong></p>
-        <p>The forecast for ${day} looks pretty bad, so we expect a rain-out. In the event that the forecast is wrong, you are welcome to show up at 9am and enjoy self-organized play.</p>
+        <p>${STA.msg('courts_rain', { day })}</p>
         ${contacts ? `<p class="muted">Questions? Contact ${contacts}.</p>` : ''}`;
       return;
     }
     if (d.week_mode === 'self_organized') {
       $('body').innerHTML = title + `<p><strong>Self-organized play: no courts have been assigned.</strong></p>
-        <p>The forecast for ${day} is not looking good. Please show up at 9am as planned and enjoy self-organized play.</p>
+        <p>${STA.msg('courts_self', { day })}</p>
         ${contacts ? `<p class="muted">Questions? Contact ${contacts}.</p>` : ''}`;
       return;
     }
@@ -97,7 +97,7 @@
       </div>
       <p class="muted"><span class="ball-mark">*</span> = bringing a new can of tennis balls for that court</p>
       ${d.waitlist.length ? `<p><strong>Wait list, in order:</strong> ${d.waitlist.map(esc).join(', ')}</p>
-        <p class="muted">Can't play after all? It's your responsibility to find a replacement from the wait list or your own contacts.</p>` : ''}`;
+        <p class="muted">${STA.msg('courts_replacement')}</p>` : ''}`;
   }
 
   start().catch(err => showMessage($('msg'), err.message));

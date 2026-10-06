@@ -111,9 +111,7 @@
       <label class="check" style="margin-top:6px"><input type="checkbox" id="notify"> Email me when players' times line up with mine</label>
     </div>
   </div>
-  <p class="muted" style="margin-bottom:0">Other members see the sex and play level of everyone who posts a time, and your name only if you show it for that time.
-    With these emails on, you hear about every player whose time shares at least an hour with yours, when your levels suit each other and you're both open to the same game (Either suits Singles and Doubles).
-    If you show your name for that time, you get the names and email addresses of the players who also show theirs, so you can decide together who plays: singles, or doubles if there are four of you. If your name is hidden, you get an email asking you to show it.</p>
+  <p class="muted" style="margin-bottom:0" id="casualIntro"></p>
   <div id="prefsMsg"></div>
 </section>
 
@@ -194,6 +192,7 @@
   // ---------- Loading ----------
   async function start() {
     if (!(await STA.initPage())) return;
+    $('casualIntro').innerHTML = STA.msg('casual_intro');
     await load();
   }
 

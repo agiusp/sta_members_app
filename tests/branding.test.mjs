@@ -80,4 +80,18 @@ await check('the Emails page offers {{program_name}} in every email', async () =
   assert.ok(!r.data.emails.some(e => /\bSTA\b/.test(e.subject + e.body)), 'no hard-coded club name left in default wording');
 });
 
+console.log('App Messages');
+await check('anyone can read the edited wording; only developers can change it; blank goes back to the default', async () => {
+  assert.deepEqual(await rpcOk(null, 'app_messages'), {});
+  const r = await rpcOk(dev, 'dev_save_app_message', { p_key: 'not_sunday', p_text: '  Sunday Doubles is by invitation. Ask Pat.  ' });
+  assert.deepEqual(r, { not_sunday: 'Sunday Doubles is by invitation. Ask Pat.' });
+  assert.deepEqual(await rpcOk(null, 'app_messages'), r, 'the sign-in page reads them before anyone signs in');
+  await rpcFails(alice, 'dev_save_app_message', { p_key: 'not_sunday', p_text: 'hacked' }, /Developers only/);
+  await rpcFails(null, 'dev_save_app_message', { p_key: 'not_sunday', p_text: 'hacked' });
+  await rpcFails(dev, 'dev_save_app_message', { p_key: 'Bad Key!', p_text: 'x' }, /Unknown message/);
+  await rpcFails(dev, 'dev_save_app_message', { p_key: 'news_website', p_text: 'x'.repeat(2001) }, /2000/);
+  assert.ok((await call('/rest/v1/app_messages?select=*', { token: alice, method: 'GET' })).status >= 400, 'no direct table access');
+  assert.deepEqual(await rpcOk(dev, 'dev_save_app_message', { p_key: 'not_sunday', p_text: ' ' }), {});
+});
+
 summary();

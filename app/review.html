@@ -77,14 +77,13 @@
   const teamName = names => names.join(' & ');
 
   function render() {
-    if (!data.session) { $('body').innerHTML = '<p>There is no game to review yet.</p>'; return; }
+    if (!data.session) { $('body').innerHTML = `<p>${STA.msg('review_none')}</p>`; return; }
     const date = fmtPlayDate(data.session.play_date);
     const played = data.players.filter(p => p.played);
     let html = `<h2>${esc(date)}</h2>`;
 
     if (!played.length) {
-      $('body').innerHTML = html + `<p>Our records show that you did not play on ${esc(date)}, so there is no game for you to review.</p>
-        <p class="muted">Only players who were assigned to a court that Sunday can review it.</p>`;
+      $('body').innerHTML = html + `<p>${STA.msg('review_not_played', { date: esc(date) })}</p>`;
       return;
     }
     if (played.length > 1) {

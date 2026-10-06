@@ -69,8 +69,8 @@
     const brand = STA.branding();
     if (brand && brand.website_url) {
       $('websiteNote').hidden = false;
-      $('websiteNote').innerHTML = `Club events, schedules and membership forms are on the club website:
-        <a href="${esc(brand.website_url)}" target="_blank" rel="noopener">${esc(brand.website_url)}</a>`;
+      $('websiteNote').innerHTML = STA.msg('news_website',
+        { website: `<a href="${esc(brand.website_url)}" target="_blank" rel="noopener">${esc(brand.website_url)}</a>` });
     }
     await load();
   }

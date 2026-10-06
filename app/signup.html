@@ -52,17 +52,16 @@
   function renderWeek(week) {
     const s = week.session;
     if (week.phase === 'none' || !s) {
-      $('weekBody').innerHTML = '<h2>No Sunday session scheduled</h2><p class="muted">Check back later in the week.</p>';
+      $('weekBody').innerHTML = `<p>${STA.msg('no_session')}</p>`;
       return;
     }
     const contacts = (week.contact_emails || [])
       .map(e => `<a href="mailto:${esc(e)}">${esc(e)}</a>`).join(' and/or ');
     const deadline = {
-      not_open: `Sign-ups open <strong>${esc(fmtDateTime(s.signups_open_at))}</strong>.`,
-      open: `Sign up or cancel until <strong>${esc(fmtDateTime(s.signups_close_at))}</strong>.`,
-      closed: `Sign-ups are closed. Court and ball assignments go out by email by ${esc(fmtDateTime(s.courts_publish_at))}.
-               Can't play after all? It's your responsibility to find a replacement from the waitlist or your own contacts${
-               contacts ? `, and to let ${contacts} know` : ''}.`
+      not_open: STA.msg('signup_not_open', { open_time: `<strong>${esc(fmtDateTime(s.signups_open_at))}</strong>` }),
+      open: STA.msg('signup_open', { close_time: `<strong>${esc(fmtDateTime(s.signups_close_at))}</strong>` }),
+      closed: STA.msg('signup_closed', { publish_time: esc(fmtDateTime(s.courts_publish_at)),
+                                         contacts_note: contacts ? `, and to let ${contacts} know` : '' })
     }[week.phase];
 
     const open = week.phase === 'open';
@@ -88,7 +87,7 @@
         <span><strong>${s.waitlist}</strong> on the waitlist</span>
       </div>
       <div class="deadline">${deadline}</div>
-      ${lapsed ? `<div class="msg error" style="margin-bottom:14px">${esc(week.dues_message)}</div>` : ''}
+      ${lapsed ? `<div class="msg error" style="margin-bottom:14px">${STA.msg('inactive')}</div>` : ''}
       ${rows || '<p class="muted">No players are linked to your account yet.</p>'}
       ${week.players.length > 1 ? '<p class="muted">Everyone linked to your account is listed, so you can sign up family members too.</p>' : ''}
     `;

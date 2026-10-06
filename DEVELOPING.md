@@ -89,6 +89,7 @@ Developers keep the **Members Table** (Developers > Members): one row per person
 - **Inactive** members can sign in but see only the dues message (`my_email()` is null for them, so every member function refuses them). Marking them Active restores access. Inactive members can't be invited, and developers must be Active.
 - **Sunday Doubles** (sign-up, courts, game review, the Monday play-invite) is only for Active members with Sunday Doubles = Yes (`my_sd_email()`). Everyone Active gets News and Casual Play.
 - **New members** start as "Pending STA Member App Invitation" until a developer clicks Send Invite. Their email can be changed until they've joined.
+- The messages members see on the pages (Inactive, not approved for Sunday Doubles, sign-in, sign-up deadlines, courts, game review, Casual Play, News) are editable in **Settings > App Messages**. Defaults are in `MESSAGES` in `app/common.js`; edits are in the `app_messages` table (`dev_save_app_message`), readable by anyone through `app_messages()`. Pages use `STA.msg(key, values)`. Short error messages from the database functions are not editable there.
 - Pages ask `my_access()` what to show: the menu hides Sunday Doubles from members not approved for it, and Inactive members see only the dues message.
 
 ## Demo
