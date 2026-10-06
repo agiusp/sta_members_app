@@ -124,6 +124,19 @@ await check('adding a court moves waitlisted players up and emails them too', as
   assert.match(await text(mail.id), /^Hello Zack,/);
 });
 
+await check('any email can be switched Off in Settings (except the invitation), by developers only', async () => {
+  await rpcOk(dev, 'dev_set_email_switch', { p_key: 'moved_off_waitlist', p_enabled: false });
+  await rpcOk(dev, 'dev_set_num_courts', { p_session_id: s.id, p_num_courts: 1 });
+  await clearInbox();
+  await rpcOk(dev, 'dev_set_num_courts', { p_session_id: s.id, p_num_courts: 2 });
+  await runTasks();
+  assert.equal((await inbox()).length, 0, 'switched off: not sent');
+  await rpcOk(dev, 'dev_set_email_switch', { p_key: 'moved_off_waitlist', p_enabled: true });
+  await rpcFails(dev, 'dev_set_email_switch', { p_key: 'setup_invite', p_enabled: false }, /can't be switched off/);
+  await rpcFails(members.alice, 'dev_set_email_switch', { p_key: 'play_invite', p_enabled: false }, /Developers only/);
+  await rpcFails(members.alice, 'dev_email_switches', {}, /Developers only/);
+});
+
 await check('with the switch off, nobody is emailed about moving up', async () => {
   await rpcOk(dev, 'dev_save_schedule', { p_rows: [{ key: 'moved_off_waitlist', enabled: false }] });
   await rpcOk(dev, 'dev_set_num_courts', { p_session_id: s.id, p_num_courts: 1 }); // Zack back on the waitlist

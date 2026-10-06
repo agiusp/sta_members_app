@@ -215,7 +215,8 @@ if (!(await table('casual_slots', '?select=id&limit=1')).length) {
     account_email: byName(n).account_email, show_name: show, notify, levels })),
     'resolution=merge-duplicates,return=minimal');
   await insert('casual_slots', casual.flatMap(([n, , , , slots]) => slots.map(([d, start, minutes, type]) => ({
-    player_id: who(n), starts_at: et(addDays(thursday, d), start), minutes, play_type: type }))), 'return=minimal');
+    player_id: who(n), starts_at: et(addDays(thursday, d), start), minutes, play_type: type,
+    created_at: et(addDays(thursday, -2), '10:00') }))), 'return=minimal');   // posted Tuesday, past the email wait
 }
 
 // ---------- Emails: this week's play-invite and the Casual Play emails ----------

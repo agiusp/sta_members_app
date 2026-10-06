@@ -1,4 +1,4 @@
-// End-to-end test of the Members Table (Developers > Members and this week):
+// End-to-end test of the Members Table (Developers > Members):
 // adding and editing members, Membership, Sunday Doubles, App Access, and
 // uploading the club's current member list. LOCAL Supabase only.
 // Run all tests with: tests/run.sh (or scripts/test-in-copy.sh)

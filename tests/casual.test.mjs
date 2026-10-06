@@ -15,6 +15,8 @@ await clearInbox();
 const dev = await bootstrapDeveloper();
 // Monday November 9, 2026, 8:00am Eastern.
 await rpcOk(dev, 'dev_set_test_clock', { p_clock: '2026-11-09T13:00:00Z' });
+// Emails go out straight away in most checks below (the wait is tested at the end).
+await rpcOk(dev, 'dev_save_casual_settings', { p_email_delay_minutes: 0 });
 const TUE = '2026-11-10';
 
 const m = {};
@@ -275,6 +277,41 @@ await check('a player can have at most 40 upcoming times', async () => {
   for (let i = 0; i < 40; i++) ok(await submit(m.henry, id.henry, day(i), i % 2 ? '18:00' : '07:00', 60));
   assert.match((await submit(m.henry, id.henry, day(39), '12:00', 60)).data.message, /40 upcoming times/);
   for (const x of (await cal(m.henry)).slots.filter(x => x.mine)) await rpcOk(m.henry, 'casual_unsubmit', { p_slot_id: x.id });
+});
+
+await check('emails wait until both times have been posted for the waiting time (2 hours by default)', async () => {
+  await clearInbox();
+  assert.equal((await rpcOk(dev, 'dev_save_casual_settings', { p_email_delay_minutes: 120 })).email_delay_minutes, 120);
+  const at = iso => rpcOk(dev, 'dev_set_test_clock', { p_clock: iso });
+  await at('2026-11-10T13:00:00Z');                                            // Tuesday 8am
+  ok(await submit(m.alice, id.alice, '2026-11-20', '09:00', 60, 'singles'));
+  ok(await submit(m.bob, id.bob, '2026-11-20', '09:00', 60, 'singles'));
+  await runTasks();
+  assert.deepEqual(await mail(/^Casual Play/), [], 'not yet');
+  // A time taken back within the waiting time is never emailed about.
+  await at('2026-11-10T14:00:00Z');
+  await rpcOk(m.bob, 'casual_unsubmit', { p_slot_id: (await mineOn(m.bob, '2026-11-20')).id });
+  ok(await submit(m.henry, id.henry, '2026-11-20', '09:00', 60, 'singles'));   // posted at 9am
+  await at('2026-11-10T15:01:00Z');                                            // Alice's time is 2h old, Henry's isn't
+  await runTasks();
+  assert.deepEqual(await mail(/^Casual Play/), []);
+  await at('2026-11-10T16:01:00Z');                                            // both 2h old
+  await runTasks();
+  assert.deepEqual(await to(/^Casual Play: players free Friday, November 20/), ['alice.johnson@example.com', 'henry.moore@example.com']);
+  await rpcFails(m.alice, 'dev_save_casual_settings', { p_email_delay_minutes: 0 }, /Developers only/);
+  await rpcFails(dev, 'dev_save_casual_settings', { p_email_delay_minutes: 5000 }, /between/);
+  await rpcOk(dev, 'dev_save_casual_settings', { p_email_delay_minutes: 0 });
+});
+
+await check('a Casual Play email switched Off is not sent', async () => {
+  await clearInbox();
+  await rpcOk(dev, 'dev_set_email_switch', { p_key: 'casual_game', p_enabled: false });
+  ok(await submit(m.alice, id.alice, '2026-11-21', '09:00', 60, 'singles'));
+  ok(await submit(m.henry, id.henry, '2026-11-21', '09:00', 60, 'singles'));
+  await runTasks();
+  assert.deepEqual(await mail(/^Casual Play/), []);
+  await rpcOk(dev, 'dev_set_email_switch', { p_key: 'casual_game', p_enabled: true });
+  assert.deepEqual(await rpcOk(dev, 'dev_email_switches'), { casual_game: true });
 });
 
 await check('the email wording is editable like the others', async () => {

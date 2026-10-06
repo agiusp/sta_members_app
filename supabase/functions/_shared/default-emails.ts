@@ -29,7 +29,7 @@ export const DEFAULT_EMAILS: EmailTemplate[] = [
   {
     key: "setup_invite",
     name: "Setup-invite",
-    sent: "When a developer clicks Send invite (or Invite all) in the Members section",
+    sent: "When a developer clicks Send Invite (or Send Invite to all pending) in the Members table",
     to: "The member's email address",
     subject: "Your invitation to {{program_name}}",
     body: `Hello {{player_names}},
@@ -59,7 +59,7 @@ What the app stores: your name, email address, play level, sex, which Sundays yo
     key: "play_invite",
     name: "Play-invite",
     sent: "When sign-ups open (Monday 9am by default)",
-    to: "Every current member who has set up their account",
+    to: "Every Active Sunday Doubles player who has joined the app",
     subject: "Sunday Doubles, {{date}}: sign-ups are open",
     body: `Hello Sunday Doubles players
 
@@ -92,7 +92,7 @@ What to know:
     key: "play_invite_review_note",
     name: "Play-invite: \"Game Review\" paragraph",
     sent: "Inside the play-invite, filling its {{review_note}}",
-    to: "Only members whose player was on a court last Sunday",
+    to: "Only players who were on a court last Sunday",
     subject: "(not used: this is a paragraph inside the play-invite)",
     body: `
 Thank you for playing {{day}}! Please take a minute to review your game (the sets you played, your partners and the scores) here:
@@ -108,7 +108,7 @@ Thank you for playing {{day}}! Please take a minute to review your game (the set
     key: "moved_off_waitlist",
     name: "Off the waitlist",
     sent: "When someone cancels before noon Saturday and a waitlisted player moves into a spot",
-    to: "The player who moved up (sent to their account's email)",
+    to: "The player who moved up",
     subject: "Sunday Doubles, {{date}}: good news, you have a spot",
     body: `Hello {{first_name}},
 
@@ -133,7 +133,7 @@ After that, contact {{contacts}}
     key: "court_assignments",
     name: "Court assignments",
     sent: "At the player-email time (Saturday 8pm by default), or within a minute of a late lock",
-    to: "Everyone on a court (one email per account)",
+    to: "Everyone on a court",
     subject: "Sunday Doubles, {{date}}: court assignments",
     body: `Hello Sunday Doubles players
 
@@ -192,7 +192,7 @@ Questions? Contact {{contacts}}
     key: "rain_expected",
     name: "Rain-out expected",
     sent: "At the player-email time (or within a minute of a late choice), when the week is set to Rain-out expected",
-    to: "Everyone signed up, waitlist included (one email per account)",
+    to: "Everyone signed up, waitlist included",
     subject: "Sunday Doubles, {{date}}: rain-out expected, no courts assigned",
     body: `Hello Sunday Doubles players
 
@@ -213,7 +213,7 @@ Questions? Contact {{contacts}}
     key: "self_organized",
     name: "Self-organized play",
     sent: "At the player-email time (or within a minute of a late choice), when the week is set to Uncertain weather",
-    to: "Everyone signed up, waitlist included (one email per account)",
+    to: "Everyone signed up, waitlist included",
     subject: "Sunday Doubles, {{date}}: self-organized play, no courts assigned",
     body: `Hello Sunday Doubles players
 
@@ -234,7 +234,7 @@ Questions? Contact {{contacts}}
   {
     key: "casual_game",
     name: "Casual Play: players line up with your time",
-    sent: "Within a minute of another player's time lining up with yours (and again whenever someone new lines up)",
+    sent: "When another player's time lines up with yours, once both times have been posted for the waiting time in Casual Play Settings (2 hours by default); again whenever someone new lines up",
     to: "The player who posted the time, if they show their name for it. Only players who also show their name are listed",
     subject: "Casual Play: players free {{when}}",
     body: `Hello {{first_name}},
@@ -268,7 +268,7 @@ Once you've set up a game, please remove this time from the Casual Play calendar
   {
     key: "casual_reveal",
     name: "Casual Play: show your name to meet players",
-    sent: "Within a minute of another player's time lining up with yours, if your name is hidden for that time (and again whenever someone new lines up)",
+    sent: "When another player's time lines up with yours and your name is hidden for that time, once both times have been posted for the waiting time in Casual Play Settings (2 hours by default); again whenever someone new lines up",
     to: "The player who posted the time, if their name is hidden for it",
     subject: "Casual Play: players free {{when}} – show your name to meet them",
     body: `Hello {{first_name}},

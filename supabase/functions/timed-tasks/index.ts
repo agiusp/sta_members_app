@@ -2,7 +2,7 @@
 // play-invite, "off the waitlist" emails, the Saturday developer emails, the
 // player emails at the publish time, and Casual Play game emails. Safe to call as often as you like:
 // the database hands out each task only once. When things happen is set in
-// the app (Developers > Emails, schedule and settings), and so is the wording.
+// the app (Developers > Settings), and so is the wording.
 //
 // Online, a scheduler calls this every minute with the service role key.
 // Developers can also trigger it (locally, the "Run timed tasks now" button).
@@ -26,7 +26,8 @@ function reply(body: unknown, status = 200) {
 type Outgoing = { kind: string; to: string; email: E.Email };
 type Templates = Awaited<ReturnType<typeof E.loadTemplates>>;
 
-function emailsFor(task: any, t0: Templates, appUrl: string, programName: string): Outgoing[] {
+// off: the emails switched Off in Settings.
+function emailsFor(task: any, t0: Templates, appUrl: string, programName: string, off: Set<string>): Outgoing[] {
   // Every email can use {{program_name}}.
   const R = (key: string, values: Record<string, string>) => E.render(t0, key, { program_name: programName, ...values });
   const date = task.play_date ? E.playDateLabel(task.play_date) : ""; // none for Casual Play
@@ -40,7 +41,7 @@ function emailsFor(task: any, t0: Templates, appUrl: string, programName: string
   switch (task.kind) {
     case "play_invite": {
       // Members who played last Sunday also get the "Game Review" paragraph.
-      const reviewNote = task.last_play_date
+      const reviewNote = task.last_play_date && !off.has("play_invite_review_note")
         ? R("play_invite_review_note", {
             day: E.dayAfter(task.now, task.last_play_date) ? "yesterday" : "last Sunday",
             review_link: appUrl + "review.html",
@@ -154,10 +155,12 @@ Deno.serve(async (req) => {
   const templates = tasks.length ? await E.loadTemplates(admin) : new Map();
   const { data: settings } = await admin.from("settings").select("program_name").maybeSingle();
   const programName: string = settings?.program_name ?? "STA - STA Members App";
+  const { data: switches } = await admin.from("email_switches").select("key, enabled");
+  const off = new Set<string>((switches ?? []).filter((x: any) => !x.enabled).map((x: any) => x.key));
   for (const task of tasks) {
     let outgoing: Outgoing[];
     try {
-      outgoing = emailsFor(task, templates, appUrl, programName);
+      outgoing = emailsFor(task, templates, appUrl, programName, off).filter(o => !off.has(o.kind));
     } catch (e) {
       failed.push(`${task.kind}: ${e instanceof Error ? e.message : e}`);
       continue;

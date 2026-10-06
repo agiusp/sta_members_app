@@ -1,0 +1,369 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Members</title>
+<link rel="stylesheet" href="styles.css">
+<style>
+  body { --page-width: 1180px; }
+  table.members td { vertical-align: top; }
+  table.members td.access { min-width: 230px; }
+  table.members button { white-space: nowrap; }
+  table.members select { min-height: 32px; padding: 3px 6px; font-size: 13px; }
+  table.members input:not([type=checkbox]) { min-height: 32px; padding: 3px 6px; font-size: 13px; }
+  table.members tr.inactive td { color: var(--muted); }
+  table.members tr.editing td { background: #f4f3fa; }
+  button.small { min-height: 30px; padding: 4px 10px; font-size: 13px; margin-top: 4px; }
+  .nowrap { white-space: nowrap; }
+  .member-form { display: flex; flex-wrap: wrap; gap: 10px 12px; align-items: end; margin-top: 10px; }
+  .upload-box { border: 1px dashed #cbd2d9; border-radius: 8px; padding: 12px 14px; margin: 4px 0 16px; background: #fbfbfc; }
+  .upload-box details { margin-top: 8px; font-size: 13px; }
+  .upload-box summary { cursor: pointer; font-weight: 600; }
+  .upload-box ul { margin: 6px 0 0; padding-left: 20px; max-height: 220px; overflow-y: auto; }
+</style>
+</head>
+<body data-page="Members" data-section="dev" data-tab="members">
+
+<main class="page">
+<div id="guardMsg"></div>
+
+<div id="devContent" hidden>
+  <section class="panel">
+    <div class="panel-title">Members Table</div>
+    <p class="muted" style="margin-top:0">One row per person, each with their own email address.
+      <strong>Membership:</strong> only Active members can use the app; Inactive members see the message set in Settings &gt; App settings.
+      <strong>Sunday Doubles:</strong> only Active members with Yes see the Sunday Doubles pages and get its emails.
+      <strong>App Access</strong> shows whether the member has joined: new members are <em>Pending STA Member App Invitation</em> until you click Send Invite.</p>
+    <details class="upload-box" id="addBox">
+      <summary class="panel-title" style="margin:0;cursor:pointer">Add a member</summary>
+      <form id="addForm" class="member-form">
+        <label>First name <input id="addFirst" required></label>
+        <label>Last name <input id="addLast" required></label>
+        <label>Email <input type="email" id="addEmail" required></label>
+        <label>Level <input id="addLevel" size="4" placeholder="3.5"></label>
+        <label>Sex <select id="addSex"><option value="">?</option><option>M</option><option>F</option></select></label>
+        <label>Membership <select id="addActive"><option value="true">Active</option><option value="false">Inactive</option></select></label>
+        <label>Sunday Doubles <select id="addSunday"><option value="false">No</option><option value="true">Yes</option></select></label>
+        <label class="check"><input type="checkbox" id="addDev"> Developer</label>
+        <button type="submit">Add</button>
+      </form>
+    </details>
+    <details class="upload-box">
+      <summary class="panel-title" style="margin:0;cursor:pointer">Upload the club's current member list</summary>
+      <p class="muted">Upload the club's list of current members as a CSV or TSV file (in Excel or Google Sheets: File &gt; Download/Save as CSV).
+        It needs an Email column and/or First and Last name columns, like the membership export. Members in the file are marked <em>Active</em>;
+        everyone else is marked <em>Inactive</em>. You'll see exactly what will change before anything is saved.</p>
+      <input type="file" id="memberFile" accept=".csv,.tsv,.txt,text/csv,text/tab-separated-values">
+      <div id="uploadPreview"></div>
+    </details>
+    <div class="row" style="margin-top:12px">
+      <label>Show
+        <select id="memberFilter">
+          <option value="all">All members</option>
+          <option value="active">Active</option>
+          <option value="inactive">Inactive</option>
+          <option value="sunday">Sunday Doubles: Yes</option>
+          <option value="pending">Pending STA Member App Invitation</option>
+          <option value="invited">Invited, not joined yet</option>
+          <option value="joined">App Access: Yes</option>
+          <option value="developers">Developers</option>
+        </select></label>
+      <label>Search <input id="memberSearch" placeholder="Name or email"></label>
+      <button class="secondary" id="inviteAllBtn">Send Invite to all pending</button>
+    </div>
+    <p class="muted" id="memberCounts"></p>
+    <div id="membersMsg"></div>
+    <div class="table-wrap" id="members" style="margin-top:12px"></div>
+  </section>
+</div>
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/dist/umd/supabase.js"
+        integrity="sha384-Rj26LVGvoeRVR6+mwQmFfcR3QOBEwT+ZmuCWpuiqeTzJpCs0ER4ITAWGb4Hiy3Ok"
+        crossorigin="anonymous"></script>
+<script src="config.js"></script>
+<script src="common.js"></script>
+<script>
+(function () {
+  const { client, esc, rpc, fmtDateTime, showMessage } = STA;
+  const $ = id => document.getElementById(id);
+
+  async function start() {
+    if (!(await STA.initPage())) return;
+    if (!(await rpc('is_developer'))) {
+      showMessage($('guardMsg'), 'This area is for developers only.');
+      return;
+    }
+    $('devContent').hidden = false;
+    await loadMembers();
+  }
+
+  // ---------- Members Table ----------
+  // One row per person: { player_id, first_name, last_name, email, level, sex,
+  // membership ('active'/'inactive'), sunday_doubles, is_developer,
+  // app_access ('yes'/'invited'/'pending'), invited_at }.
+  let memberRows = [];
+  let editingId = null;
+  const fullName = m => `${m.first_name} ${m.last_name}`;
+
+  async function loadMembers() {
+    memberRows = await rpc('dev_members');
+    const n = f => memberRows.filter(f).length;
+    $('memberCounts').textContent = `${memberRows.length} members: ${n(m => m.membership === 'active')} Active, ` +
+      `${n(m => m.membership === 'inactive')} Inactive · ${n(m => m.membership === 'active' && m.sunday_doubles)} Active Sunday Doubles players · ` +
+      `App Access: ${n(m => m.app_access === 'yes')} joined, ${n(m => m.app_access === 'invited')} invited, ` +
+      `${n(m => m.membership === 'active' && m.app_access === 'pending')} Active members pending invitation`;
+    const pending = memberRows.filter(m => m.membership === 'active' && m.app_access === 'pending');
+    $('inviteAllBtn').disabled = !pending.length;
+    $('inviteAllBtn').textContent = pending.length ? `Send Invite to all ${pending.length} pending` : 'No invitations pending';
+    renderMembers();
+  }
+
+  function appAccess(m) {
+    if (m.app_access === 'yes') return '<strong>Yes</strong>';
+    const can = m.membership === 'active';
+    const status = m.app_access === 'invited'
+      ? `No <span class="muted">· Invited ${esc(fmtDateTime(m.invited_at))}, not joined yet</span>`
+      : 'No <span class="muted">· Pending STA Member App Invitation</span>';
+    const btn = can ? `<br><button class="${m.app_access === 'invited' ? 'secondary' : ''} small" data-invite="${esc(m.email)}">${m.app_access === 'invited' ? 'Resend Invite' : 'Send Invite'}</button>`
+      : '<br><span class="muted">Mark Active to invite</span>';
+    return status + btn;
+  }
+
+  function renderMembers() {
+    const f = $('memberFilter').value;
+    const q = $('memberSearch').value.trim().toLowerCase();
+    const rows = memberRows.filter(m =>
+      (f === 'all' || (f === 'active' && m.membership === 'active') || (f === 'inactive' && m.membership === 'inactive') ||
+       (f === 'sunday' && m.sunday_doubles) || (f === 'pending' && m.app_access === 'pending') ||
+       (f === 'invited' && m.app_access === 'invited') || (f === 'joined' && m.app_access === 'yes') ||
+       (f === 'developers' && m.is_developer)) &&
+      (!q || fullName(m).toLowerCase().includes(q) || m.email.includes(q)));
+    const sel = (field, value, options) => `<select data-field="${field}" aria-label="${field}">${options.map(([v, label]) =>
+      `<option value="${v}" ${String(value) === v ? 'selected' : ''}>${label}</option>`).join('')}</select>`;
+    $('members').innerHTML = rows.length ? `<table class="members">
+      <tr><th>Name</th><th>Email</th><th>Membership</th><th>Sunday Doubles</th><th>App Access</th><th>Level</th><th>Sex</th><th>Developer</th><th></th></tr>
+      ${rows.map(m => m.player_id === editingId ? `<tr data-id="${m.player_id}" class="editing">
+        <td><input data-edit="first_name" value="${esc(m.first_name)}" aria-label="First name" size="9">
+            <input data-edit="last_name" value="${esc(m.last_name)}" aria-label="Last name" size="10"></td>
+        <td><input data-edit="email" type="email" value="${esc(m.email)}" aria-label="Email" ${m.app_access === 'yes' ? 'disabled title="This member has joined; their email can\'t be changed here"' : ''}></td>
+        <td>${sel('active', m.membership === 'active', [['true', 'Active'], ['false', 'Inactive']])}</td>
+        <td>${sel('sunday', m.sunday_doubles, [['true', 'Yes'], ['false', 'No']])}</td>
+        <td class="access">${appAccess(m)}</td>
+        <td><input data-edit="level" value="${esc(m.level || '')}" aria-label="Level" size="3" placeholder="3.5"></td>
+        <td>${sel('sex', m.sex || '', [['', '?'], ['M', 'M'], ['F', 'F']])}</td>
+        <td><input type="checkbox" data-field="developer" ${m.is_developer ? 'checked' : ''} aria-label="Developer"></td>
+        <td class="nowrap"><button class="small" data-act="save">Save</button> <button class="secondary small" data-act="cancel">Cancel</button></td>
+      </tr>` : `<tr data-id="${m.player_id}" class="${m.membership === 'inactive' ? 'inactive' : ''}">
+        <td>${esc(fullName(m))}</td>
+        <td>${esc(m.email)}</td>
+        <td>${sel('active', m.membership === 'active', [['true', 'Active'], ['false', 'Inactive']])}</td>
+        <td>${sel('sunday', m.sunday_doubles, [['true', 'Yes'], ['false', 'No']])}</td>
+        <td class="access">${appAccess(m)}</td>
+        <td>${esc(m.level || '?')}</td>
+        <td>${esc(m.sex || '?')}</td>
+        <td><input type="checkbox" data-field="developer" ${m.is_developer ? 'checked' : ''} aria-label="Developer"></td>
+        <td><button class="secondary small" data-act="edit">Edit</button></td>
+      </tr>`).join('')}
+    </table>` : '<p class="muted">No members match.</p>';
+  }
+
+  // Saves one member: the row's current values, with any changes.
+  async function saveMember(m, changes) {
+    const v = { first_name: m.first_name, last_name: m.last_name, email: m.email, level: m.level, sex: m.sex,
+                active: m.membership === 'active', sunday: m.sunday_doubles, developer: m.is_developer, ...changes };
+    await rpc('dev_save_member', { p_player_id: m.player_id, p_first_name: v.first_name, p_last_name: v.last_name,
+      p_email: v.email, p_level: v.level, p_sex: v.sex, p_active: v.active, p_sunday_doubles: v.sunday, p_developer: v.developer });
+  }
+
+  $('memberFilter').addEventListener('change', renderMembers);
+  $('memberSearch').addEventListener('input', renderMembers);
+
+  // Membership, Sunday Doubles and Developer save as soon as they change
+  // (except while a row is being edited: then Save saves everything).
+  $('members').addEventListener('change', async e => {
+    const tr = e.target.closest('tr[data-id]');
+    const field = e.target.dataset.field;
+    if (!tr || !field || tr.classList.contains('editing')) return;
+    const m = memberRows.find(x => x.player_id === Number(tr.dataset.id));
+    const value = field === 'developer' ? e.target.checked : e.target.value === 'true';
+    if (field === 'developer' && !value && !confirm(`Remove ${fullName(m)} as a developer? They'll lose access to the Developers pages.`)) {
+      e.target.checked = true; return;
+    }
+    showMessage($('membersMsg'), '');
+    try {
+      await saveMember(m, { [field]: value });
+      const what = { active: value ? 'Active' : 'Inactive', sunday: `Sunday Doubles: ${value ? 'Yes' : 'No'}`,
+                     developer: value ? 'now a developer' : 'no longer a developer' }[field];
+      showMessage($('membersMsg'), `${fullName(m)}: ${what}.`, 'ok');
+    } catch (err) { showMessage($('membersMsg'), err.message); }
+    await loadMembers();
+  });
+
+  $('members').addEventListener('click', async e => {
+    const tr = e.target.closest('tr[data-id]');
+    const m = tr && memberRows.find(x => x.player_id === Number(tr.dataset.id));
+    const act = e.target.closest('[data-act]')?.dataset.act;
+    if (act === 'edit') { editingId = m.player_id; renderMembers(); return; }
+    if (act === 'cancel') { editingId = null; renderMembers(); return; }
+    if (act === 'save') {
+      const val = k => tr.querySelector(`[data-edit="${k}"]`).value.trim();
+      const pick = k => tr.querySelector(`[data-field="${k}"]`);
+      try {
+        await saveMember(m, { first_name: val('first_name'), last_name: val('last_name'), email: val('email').toLowerCase(),
+          level: val('level') || null, sex: pick('sex').value || null, active: pick('active').value === 'true',
+          sunday: pick('sunday').value === 'true', developer: pick('developer').checked });
+        editingId = null;
+        showMessage($('membersMsg'), `Saved ${val('first_name')} ${val('last_name')}.`, 'ok');
+        await loadMembers();
+      } catch (err) { showMessage($('membersMsg'), err.message); }
+      return;
+    }
+    const b = e.target.closest('button[data-invite]');
+    if (!b) return;
+    b.disabled = true;
+    showMessage($('membersMsg'), '');
+    const err = await sendInvite(b.dataset.invite);
+    if (err) { showMessage($('membersMsg'), err); b.disabled = false; return; }
+    showMessage($('membersMsg'), `Invitation sent to ${b.dataset.invite}. The link works for 24 hours.`, 'ok');
+    await loadMembers();
+  });
+
+  $('addForm').addEventListener('submit', async e => {
+    e.preventDefault();
+    showMessage($('membersMsg'), '');
+    try {
+      await rpc('dev_save_member', { p_player_id: null, p_first_name: $('addFirst').value, p_last_name: $('addLast').value,
+        p_email: $('addEmail').value, p_level: $('addLevel').value, p_sex: $('addSex').value || null,
+        p_active: $('addActive').value === 'true', p_sunday_doubles: $('addSunday').value === 'true', p_developer: $('addDev').checked });
+      showMessage($('membersMsg'), `Added ${$('addFirst').value.trim()} ${$('addLast').value.trim()}. App Access: Pending STA Member App Invitation. Click Send Invite when you're ready.`, 'ok');
+      $('addForm').reset();
+      await loadMembers();
+    } catch (err) { showMessage($('membersMsg'), err.message); }
+  });
+
+  // Returns null on success, or the error message.
+  async function sendInvite(email) {
+    const { error } = await client.functions.invoke('invite-member', {
+      body: { email, redirectTo: new URL('./', location.href).href }
+    });
+    if (!error) return null;
+    try { return (await error.context.json()).error || error.message; }
+    catch (_) { return error.message; }
+  }
+
+  // One at a time, so a problem with one email doesn't stop the rest and the
+  // email service isn't flooded.
+  $('inviteAllBtn').addEventListener('click', async () => {
+    const emails = memberRows.filter(m => m.membership === 'active' && m.app_access === 'pending').map(m => m.email);
+    if (!emails.length) return;
+    if (!confirm(`Send the STA Members App invitation to ${emails.length} Active member(s) who haven't been invited yet?`)) return;
+    $('inviteAllBtn').disabled = true;
+    const failed = [];
+    for (let i = 0; i < emails.length; i++) {
+      showMessage($('membersMsg'), `Sending invitation ${i + 1} of ${emails.length}…`, 'ok');
+      const err = await sendInvite(emails[i]);
+      if (err) failed.push(`${emails[i]}: ${err}`);
+    }
+    const sent = emails.length - failed.length;
+    showMessage($('membersMsg'),
+      `Sent ${sent} invitation(s).` + (failed.length ? ` ${failed.length} failed: ${failed.join('; ')}` : ''),
+      failed.length ? 'error' : 'ok');
+    await loadMembers();
+  });
+
+  // ---------- Upload current members ----------
+  // "Mary-Ann  O'Brien" -> "maryann obrien": ignores case, accents and punctuation.
+  const normName = s => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
+    .replace(/[^a-z ]/g, '').replace(/\s+/g, ' ').trim();
+
+  // People in the file: { email, name, label }.
+  function readMemberList(text) {
+    const rows = STA.parseDelimited(text);
+    if (!rows.length) throw new Error('That file is empty.');
+    const head = rows[0].map(h => h.toLowerCase());
+    const col = re => head.findIndex(h => re.test(h));
+    const email = col(/e-?mail/), first = col(/first/), last = col(/last|surname|family/);
+    const full = first === -1 || last === -1 ? col(/^(full[ ._]?)?name$/) : -1;
+    if (email === -1 && (first === -1 || last === -1) && full === -1) {
+      throw new Error('Could not find an Email column or First and Last name columns in the first row of the file.');
+    }
+    return rows.slice(1).map(r => {
+      const e = email === -1 ? '' : (r[email] || '').toLowerCase();
+      const n = full !== -1 ? r[full] || '' : first !== -1 && last !== -1 ? `${r[first] || ''} ${r[last] || ''}` : '';
+      return { email: /@/.test(e) ? e : '', name: normName(n), label: [n.trim(), e].filter(Boolean).join(' <') + (n.trim() && e ? '>' : '') };
+    }).filter(p => p.email || p.name);
+  }
+
+  let pendingCurrent = null; // emails to mark current, once confirmed
+
+  const memberLabel = m => `${fullName(m)} <${m.email}>${m.is_developer ? ' (developer)' : ''}`;
+
+  function previewMemberList(people) {
+    const emails = new Set(people.map(p => p.email).filter(Boolean));
+    const names = new Set(people.map(p => p.name).filter(Boolean));
+    const inFile = m => emails.has(m.email) || names.has(normName(fullName(m)));
+    const current = memberRows.filter(inFile);
+    const lapsed = memberRows.filter(m => !inFile(m));
+    const known = new Set(memberRows.map(m => m.email));
+    const knownNames = new Set(memberRows.map(m => normName(fullName(m))));
+    const unknown = people.filter(p => !known.has(p.email) && !knownNames.has(p.name));
+    const isActive = m => m.membership === 'active';
+    const newlyCurrent = current.filter(m => !isActive(m));
+    const newlyLapsed = lapsed.filter(isActive);
+    const list = (title, arr, open) => arr.length ? `<details ${open ? 'open' : ''}><summary>${esc(title)} (${arr.length})</summary>
+      <ul>${arr.map(x => `<li>${esc(typeof x === 'string' ? x : memberLabel(x))}</li>`).join('')}</ul></details>` : '';
+    pendingCurrent = current.map(a => a.email);
+    $('uploadPreview').innerHTML = `<div class="msg ${current.length ? 'ok' : 'error'}" style="color:var(--ink)">
+        <strong>${people.length}</strong> people in the file. If you apply it:
+        <strong>${current.length}</strong> member(s) will be Active and <strong>${lapsed.length}</strong> Inactive
+        (${newlyCurrent.length} change to Active, ${newlyLapsed.length} change to Inactive).
+        ${list('Changing to Inactive', newlyLapsed, true)}
+        ${list('Changing to Active', newlyCurrent, true)}
+        ${list('In the file but not in the app (add them with Add a member if they should be)', unknown.map(p => p.label), unknown.length <= 15)}
+        ${list('Staying Active', current.filter(isActive), false)}
+        ${list('Staying Inactive', lapsed.filter(m => !isActive(m)), false)}
+      </div>
+      <div class="row" style="margin-top:10px">
+        <button id="applyListBtn" ${current.length ? '' : 'disabled'}>Apply: ${current.length} Active, ${lapsed.length} Inactive</button>
+        <button class="secondary" id="cancelListBtn">Cancel</button>
+      </div>`;
+    if (!current.length) showMessage($('membersMsg'), 'Nobody in the file matches a member in the app by email or name, so it cannot be applied. Check that it is the right file.');
+  }
+
+  $('memberFile').addEventListener('change', async () => {
+    const file = $('memberFile').files[0];
+    showMessage($('membersMsg'), '');
+    $('uploadPreview').innerHTML = '';
+    pendingCurrent = null;
+    if (!file) return;
+    if (/\.xlsx?$/i.test(file.name)) {
+      showMessage($('membersMsg'), 'Please save the spreadsheet as a CSV file first (File > Save as / Download > CSV), then upload that.');
+      return;
+    }
+    try { previewMemberList(readMemberList(await file.text())); }
+    catch (err) { showMessage($('membersMsg'), err.message); }
+  });
+
+  $('uploadPreview').addEventListener('click', async e => {
+    if (e.target.id === 'cancelListBtn') {
+      $('uploadPreview').innerHTML = ''; $('memberFile').value = ''; pendingCurrent = null;
+      return;
+    }
+    if (e.target.id !== 'applyListBtn' || !pendingCurrent) return;
+    e.target.disabled = true;
+    try {
+      const r = await rpc('dev_set_current_members', { p_current_emails: pendingCurrent });
+      $('uploadPreview').innerHTML = ''; $('memberFile').value = ''; pendingCurrent = null;
+      showMessage($('membersMsg'), `Member list applied: ${r.current} Active, ${r.lapsed} Inactive. Inactive members can still sign in, but see only the dues message.`, 'ok');
+      await loadMembers();
+    } catch (err) { e.target.disabled = false; showMessage($('membersMsg'), err.message); }
+  });
+
+
+  start().catch(err => showMessage($('guardMsg'), err.message));
+})();
+</script>
+</body>
+</html>

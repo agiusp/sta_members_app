@@ -1,6 +1,6 @@
 // Sends a member their setup-invite so they can set a password. Supabase
 // makes the personal link; the email itself uses the app's editable wording
-// (Developers > Emails, schedule and settings). Only developers may call it, and
+// (Developers > Settings > App settings). Only developers may call it, and
 // only for current members already in the accounts table, so nobody outside
 // the member list can get an account.
 import { createClient } from "npm:@supabase/supabase-js@2.117.2";

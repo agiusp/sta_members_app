@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Emails, schedule and settings</title>
+<title>Settings</title>
 <link rel="stylesheet" href="styles.css">
 <style>
   body { --page-width: 980px; }
@@ -31,6 +31,15 @@
   .brand-preview .site-nav a { pointer-events: none; }
   #brandHex { width: 90px; }
   input[type="color"] { width: 46px; height: 38px; padding: 2px; border: 1px solid #cbd2d9; border-radius: 6px; background: #fff; }
+  .seg { display: inline-flex; flex-wrap: wrap; border: 1px solid var(--accent); border-radius: 8px; overflow: hidden; margin-bottom: 18px; }
+  .seg button { border: none; border-radius: 0; background: #fff; color: var(--accent); min-height: 38px; padding: 7px 16px; }
+  .seg button + button { border-left: 1px solid var(--accent); }
+  .seg button.active { background: var(--accent); color: #fff; }
+  .seg.small button { min-height: 32px; padding: 5px 13px; font-size: 13px; }
+  .email-card .head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; flex-wrap: wrap; }
+  .email-card label.switch { flex-direction: row; align-items: center; gap: 8px; font-size: 14px; font-weight: 600; color: var(--ink); cursor: pointer; white-space: nowrap; }
+  .email-card label.switch input { width: 18px; height: 18px; margin: 0; }
+  .email-card.off .meta, .email-card.off label, .email-card.off .placeholders { opacity: 0.55; }
   #docView .doc-email { page-break-inside: avoid; margin-bottom: 28px; }
   #docView .doc-email h3 { margin-bottom: 4px; }
   @media print {
@@ -41,16 +50,24 @@
   }
 </style>
 </head>
-<body data-page="Emails, schedule and settings" data-section="dev" data-tab="emails">
+<body data-page="Settings" data-section="dev" data-tab="settings">
 
 <main class="page">
 <div id="guardMsg"></div>
 
 <div id="editView" hidden>
+  <div class="seg no-print" id="paneTabs" role="tablist">
+    <button data-pane="app">App settings</button>
+    <button data-pane="sunday">Sunday Doubles Settings</button>
+    <button data-pane="casual">Casual Play Settings</button>
+  </div>
+
+  <!-- App settings -->
+  <div data-pane-body="app">
   <section class="panel" id="brandPanel">
-    <div class="panel-title">Settings: app name, color, logo and club website</div>
+    <div class="panel-title">App name, color, logo and club website</div>
     <p class="muted">Shown at the top of every page (including the sign-in page) and in browser tab titles.
-      The name also fills <code>{{program_name}}</code> in the emails below, and is the sender name on emails.
+      The name also fills <code>{{program_name}}</code> in the emails, and is the sender name on emails.
       A name like "STA - STA Members App" shows as "STA" with "STA Members App" under it.</p>
     <div class="row">
       <label style="flex:1; min-width:220px">App name
@@ -73,29 +90,78 @@
       <button id="previewButton" type="button">A button</button> <a href="#" id="previewLink" onclick="return false">A link</a>
     </div>
     <div id="contrastNote"></div>
-    <div class="row" style="margin-top:12px"><button id="saveBrandBtn">Save settings</button></div>
+    <div class="row" style="margin-top:12px"><button id="saveBrandBtn">Save</button></div>
     <div id="brandMsg"></div>
   </section>
 
   <section class="panel">
+    <div class="panel-title">Message for Inactive members</div>
+    <p class="muted">Inactive members can still sign in, but see only this message until a developer marks them Active again (Developers &gt; Members).</p>
+    <div class="row">
+      <label style="flex:1; min-width:240px">Message
+        <textarea id="duesInput" rows="3" style="font:inherit;font-size:14px;padding:8px 9px;border:1px solid #cbd2d9;border-radius:6px"></textarea></label>
+      <button id="duesSaveBtn">Save</button>
+    </div>
+    <div id="duesMsg"></div>
+  </section>
+
+  <section class="panel">
+    <div class="panel-title">Invitation email</div>
+    <p class="muted">Sent when a developer clicks Send Invite in the Members table. It can't be switched off: it's how members join the app.</p>
+    <div class="email-list" data-group="app"></div>
+  </section>
+  </div>
+
+  <!-- Sunday Doubles Settings -->
+  <div data-pane-body="sunday" hidden>
+  <div class="seg small no-print" id="sundayTabs">
+    <button data-sub="time">Time settings</button>
+    <button data-sub="email">Email settings</button>
+  </div>
+  <section class="panel" data-sub-body="time">
     <div class="panel-title">Weekly schedule (US Eastern)</div>
-    <p class="muted">When each deadline and timed email happens. The conditions are fixed; days, times and on/off switches can be changed.
+    <p class="muted">When each deadline and timed email happens. The conditions are fixed; days and times can be changed (switch emails on or off under Email settings).
       Changes apply from next week, or from this week if its sign-ups haven't opened yet.
-      If you move a deadline, also update any email wording below that mentions it (for example "noon on Saturday").</p>
+      If you move a deadline, also update any email wording that mentions it (for example "noon on Saturday").</p>
     <div class="table-wrap"><table class="sched" id="schedTable"></table></div>
     <div class="row" style="margin-top:10px"><button id="saveSchedBtn">Save schedule</button></div>
     <div id="schedMsg"></div>
   </section>
-
-  <section class="panel">
+  <section class="panel" data-sub-body="email" hidden>
     <div class="row" style="justify-content:space-between">
-      <div class="panel-title" style="margin:0">Email wording</div>
+      <div class="panel-title" style="margin:0">Sunday Doubles emails</div>
       <button class="secondary" id="docBtn">View all emails as one document</button>
     </div>
-    <p class="muted">Words in {{double braces}} are filled in when the email is sent; each email lists the ones it can use.
+    <p class="muted">Switch an email Off to stop sending it altogether (it's On unless you switch it off).
+      Words in {{double braces}} are filled in when the email is sent; each email lists the ones it can use.
       Your edits are used from the next email onwards. <em>Reset to default</em> brings back the original wording.</p>
-    <div id="emailList"></div>
+    <div class="email-list" data-group="sunday"></div>
   </section>
+  </div>
+
+  <!-- Casual Play Settings -->
+  <div data-pane-body="casual" hidden>
+  <section class="panel">
+    <div class="panel-title">Wait before emailing players</div>
+    <p class="muted">When players' times line up, wait this long after a time is posted before emailing anyone about it.
+      A player who posts a time by mistake can take it back first, and nobody hears about it.</p>
+    <div class="row">
+      <label>Wait
+        <select id="casualDelay">
+          <option value="0">Don't wait</option><option value="15">15 minutes</option><option value="30">30 minutes</option>
+          <option value="60">1 hour</option><option value="120">2 hours</option><option value="240">4 hours</option>
+          <option value="480">8 hours</option><option value="720">12 hours</option><option value="1440">24 hours</option>
+        </select></label>
+      <button id="saveCasualBtn">Save</button>
+    </div>
+    <div id="casualMsg"></div>
+  </section>
+  <section class="panel">
+    <div class="panel-title">Casual Play emails</div>
+    <p class="muted">The emails players get when their times line up. Switch one Off to stop sending it altogether.</p>
+    <div class="email-list" data-group="casual"></div>
+  </section>
+  </div>
 </div>
 
 <div id="docView" hidden>
@@ -120,7 +186,9 @@
 (function () {
   const { client, esc, rpc, fmtDateTime, showMessage } = STA;
   const $ = id => document.getElementById(id);
-  let emails = [], schedule = [], myEmail = '', contacts = '';
+  let emails = [], schedule = [], myEmail = '', contacts = '', switches = {};
+  const groupOf = key => key === 'setup_invite' ? 'app' : key.startsWith('casual_') ? 'casual' : 'sunday';
+  const isOn = key => switches[key] !== false;
   let brand = null, logo = null; // logo: data URL or null
 
   // Same rule as the server: fill {{name}}, leave unknown names visible.
@@ -131,13 +199,11 @@
   // Weekly order, what each entry is, and its fixed condition.
   const SCHED = [
     { key: 'signups_open', what: 'Sign-ups open', cond: 'Every week' },
-    { key: 'play_invite', what: 'Play-invite email', cond: 'Sent when sign-ups open, to current members who have set up their account', switchOnly: true },
-    { key: 'moved_off_waitlist', what: '"Off the waitlist" email', cond: 'When someone cancels (or a court is added) while sign-ups are open and a waitlisted player gets a spot', switchOnly: true },
     { key: 'signups_close', what: 'Sign-ups close (cancellations too)', cond: 'Every week' },
-    { key: 'dev_scheduler_open', what: 'Developers: time to run the Scheduler', cond: 'Every week', canSwitch: true },
-    { key: 'dev_reminder_1', what: 'Developers: first reminder', cond: 'Only if nothing is locked yet', canSwitch: true },
-    { key: 'dev_reminder_2', what: 'Developers: final reminder', cond: 'Only if still nothing is locked', canSwitch: true },
-    { key: 'dev_locked_summary', what: 'Developers: locked summary', cond: 'Only if locked; sent again if re-locked later', canSwitch: true },
+    { key: 'dev_scheduler_open', what: 'Developers: time to run the Scheduler', cond: 'Every week' },
+    { key: 'dev_reminder_1', what: 'Developers: first reminder', cond: 'Only if nothing is locked yet' },
+    { key: 'dev_reminder_2', what: 'Developers: final reminder', cond: 'Only if still nothing is locked' },
+    { key: 'dev_locked_summary', what: 'Developers: locked summary', cond: 'Only if locked; sent again if re-locked later' },
     { key: 'courts_publish', what: 'Player emails and Court Assignments page', cond: 'Court and no-spot emails, or the weather email; if nothing is locked, developers are alerted instead' },
     { key: 'late_lock_until', what: 'Late-lock cutoff', cond: 'Last moment a developer can lock a week nobody locked on time; the emails then go out at once' }
   ];
@@ -148,8 +214,10 @@
     myEmail = session.user.email;
     if (!(await rpc('is_developer'))) { showMessage($('guardMsg'), 'This area is for developers only.'); return; }
     await loadBranding();
-    await load();
+    await Promise.all([load(), loadDues(), loadCasual()]);
     $('editView').hidden = false;
+    const [pane, sub] = location.hash.slice(1).split('-');
+    showPane(['app', 'sunday', 'casual'].includes(pane) ? pane : 'app', sub === 'email' ? 'email' : 'time');
   }
 
   async function load() {
@@ -158,9 +226,51 @@
     emails = data.emails;
     schedule = data.schedule;
     contacts = data.contacts;
+    switches = await rpc('dev_email_switches');
     renderSchedule();
     renderEmails();
   }
+
+  // ---------- Sections ----------
+  let sundaySub = 'time';
+  function showPane(pane, sub = sundaySub) {
+    sundaySub = sub;
+    document.querySelectorAll('[data-pane]').forEach(b => b.classList.toggle('active', b.dataset.pane === pane));
+    document.querySelectorAll('[data-pane-body]').forEach(d => { d.hidden = d.dataset.paneBody !== pane; });
+    document.querySelectorAll('[data-sub]').forEach(b => b.classList.toggle('active', b.dataset.sub === sub));
+    document.querySelectorAll('[data-sub-body]').forEach(d => { d.hidden = d.dataset.subBody !== sub; });
+    history.replaceState(null, '', '#' + pane + (pane === 'sunday' ? '-' + sub : ''));
+  }
+  $('paneTabs').addEventListener('click', e => { const b = e.target.closest('[data-pane]'); if (b) showPane(b.dataset.pane); });
+  $('sundayTabs').addEventListener('click', e => { const b = e.target.closest('[data-sub]'); if (b) showPane('sunday', b.dataset.sub); });
+
+  // ---------- Message for Inactive members ----------
+  async function loadDues() {
+    const { data } = await client.from('settings').select('dues_message').maybeSingle();
+    $('duesInput').value = data ? data.dues_message : '';
+  }
+  $('duesSaveBtn').addEventListener('click', async () => {
+    const text = $('duesInput').value.trim();
+    if (!text) { showMessage($('duesMsg'), 'The message cannot be empty.'); return; }
+    const { error } = await client.from('settings').update({ dues_message: text }).eq('id', true);
+    showMessage($('duesMsg'), error ? error.message : 'Message saved.', error ? 'error' : 'ok');
+  });
+
+  // ---------- Casual Play: wait before emailing ----------
+  async function loadCasual() {
+    const c = await rpc('dev_casual_settings');
+    const v = String(c.email_delay_minutes);
+    if (![...$('casualDelay').options].some(o => o.value === v)) {
+      $('casualDelay').insertAdjacentHTML('beforeend', `<option value="${esc(v)}">${esc(v)} minutes</option>`);
+    }
+    $('casualDelay').value = v;
+  }
+  $('saveCasualBtn').addEventListener('click', async () => {
+    try {
+      await rpc('dev_save_casual_settings', { p_email_delay_minutes: Number($('casualDelay').value) });
+      showMessage($('casualMsg'), 'Saved. It applies to the next emails.', 'ok');
+    } catch (err) { showMessage($('casualMsg'), err.message); }
+  });
 
   // ---------- Settings: program name, color, logo ----------
   async function loadBranding() {
@@ -245,18 +355,14 @@
   // ---------- Schedule ----------
   function renderSchedule() {
     const byKey = Object.fromEntries(schedule.map(r => [r.key, r]));
-    $('schedTable').innerHTML = `<tr><th>What</th><th>Day</th><th>Time</th><th>On</th><th>Condition</th></tr>` +
+    $('schedTable').innerHTML = `<tr><th>What</th><th>Day</th><th>Time</th><th>Condition</th></tr>` +
       SCHED.map(d => {
         const r = byKey[d.key];
         const time = (r.at_time || '').slice(0, 5);
-        const dayCell = d.switchOnly ? '<span class="muted">see condition</span>' :
-          `<select data-key="${d.key}" data-field="day">${DAYS.map(([v, n]) =>
+        const dayCell = `<select data-key="${d.key}" data-field="day">${DAYS.map(([v, n]) =>
             `<option value="${v}" ${String(r.days_before_sunday) === v ? 'selected' : ''}>${n}</option>`).join('')}</select>`;
-        const timeCell = d.switchOnly ? '' : `<input type="time" data-key="${d.key}" data-field="time" value="${time}">`;
-        const onCell = (d.switchOnly || d.canSwitch)
-          ? `<input type="checkbox" data-key="${d.key}" data-field="enabled" ${r.enabled ? 'checked' : ''}>`
-          : '<span class="muted">always</span>';
-        return `<tr><td>${esc(d.what)}</td><td>${dayCell}</td><td>${timeCell}</td><td>${onCell}</td><td class="muted">${esc(d.cond)}</td></tr>`;
+        const timeCell = `<input type="time" data-key="${d.key}" data-field="time" value="${time}">`;
+        return `<tr><td>${esc(d.what)}</td><td>${dayCell}</td><td>${timeCell}</td><td class="muted">${esc(d.cond)}</td></tr>`;
       }).join('');
   }
 
@@ -266,7 +372,6 @@
       const r = rows[el.dataset.key] ||= { key: el.dataset.key };
       if (el.dataset.field === 'day') r.days_before_sunday = Number(el.value);
       if (el.dataset.field === 'time') r.at_time = el.value;
-      if (el.dataset.field === 'enabled') r.enabled = el.checked;
     });
     try {
       const msg = await rpc('dev_save_schedule', { p_rows: Object.values(rows) });
@@ -279,10 +384,19 @@
   const current = e => e.edited ? { subject: e.edited.subject, body: e.edited.body } : { subject: e.subject, body: e.body };
 
   function renderEmails() {
-    $('emailList').innerHTML = emails.map(e => {
+    document.querySelectorAll('.email-list').forEach(list => {
+      list.innerHTML = emails.filter(e => groupOf(e.key) === list.dataset.group).map(emailCard).join('');
+    });
+  }
+
+  function emailCard(e) {
       const c = current(e);
-      return `<div class="email-card" data-key="${e.key}">
-        <h3>${esc(e.name)} ${e.edited ? '<span class="badge wait">Edited</span>' : '<span class="badge none">Default wording</span>'}</h3>
+      const on = isOn(e.key);
+      const toggle = e.key === 'setup_invite' ? '' :
+        `<label class="switch"><input type="checkbox" data-switch="${e.key}" ${on ? 'checked' : ''}> ${on ? 'On' : 'Off'}</label>`;
+      return `<div class="email-card ${on ? '' : 'off'}" data-key="${e.key}">
+        <div class="head"><h3>${esc(e.name)} ${e.edited ? '<span class="badge wait">Edited</span>' : '<span class="badge none">Default wording</span>'}
+          ${on ? '' : '<span class="badge wait">Off: not sent</span>'}</h3>${toggle}</div>
         <div class="meta"><strong>Sent:</strong> ${esc(e.sent)}<br><strong>To:</strong> ${esc(e.to)}
           ${e.edited ? `<br>Last edited ${esc(fmtDateTime(e.edited.updated_at))}${e.edited.updated_by ? ' by ' + esc(e.edited.updated_by) : ''}` : ''}</div>
         <label>Subject <input class="subject" value="${esc(c.subject)}"></label>
@@ -297,8 +411,26 @@
         <div class="msg-slot"></div>
         <div class="preview" hidden></div>
       </div>`;
-    }).join('');
   }
+
+  // On/Off switches save right away.
+  document.addEventListener('change', async ev => {
+    const box = ev.target.closest('input[data-switch]');
+    if (!box) return;
+    const key = box.dataset.switch;
+    const e = emails.find(x => x.key === key);
+    if (!box.checked && !confirm(`Switch off "${e.name}"? It won't be sent at all until you switch it back on.`)) { box.checked = true; return; }
+    try {
+      await rpc('dev_set_email_switch', { p_key: key, p_enabled: box.checked });
+      switches[key] = box.checked;
+      renderEmails();
+      showMessage(document.querySelector(`.email-card[data-key="${key}"] .msg-slot`),
+        box.checked ? 'On: this email will be sent.' : 'Off: this email won\'t be sent.', 'ok');
+    } catch (err) {
+      box.checked = !box.checked;
+      showMessage(box.closest('.email-card').querySelector('.msg-slot'), err.message);
+    }
+  });
 
   // Problems worth pointing out before saving.
   function checkTemplate(e, subject, body) {
@@ -312,7 +444,7 @@
     return problems;
   }
 
-  $('emailList').addEventListener('click', async ev => {
+  document.querySelectorAll('.email-list').forEach(list => list.addEventListener('click', async ev => {
     const btn = ev.target.closest('button[data-act]');
     if (!btn) return;
     const card = btn.closest('.email-card');
@@ -351,7 +483,7 @@
       await load();
       showMessage(document.querySelector(`.email-card[data-key="${e.key}"] .msg-slot`), 'Back to the default wording.', 'ok');
     }
-  });
+  }));
 
   // ---------- One-document view ----------
   $('docBtn').addEventListener('click', () => {
@@ -361,7 +493,7 @@
       return `<div class="doc-email">
         <h3>${esc(e.name)}</h3>
         <div class="meta"><strong>Sent:</strong> ${esc(e.sent)}<br><strong>To:</strong> ${esc(e.to)}<br>
-          <strong>Wording:</strong> ${e.edited ? 'edited in the app' : 'default'}</div>
+          <strong>Wording:</strong> ${e.edited ? 'edited in the app' : 'default'}${isOn(e.key) ? '' : ' · <strong>Switched off: not sent</strong>'}</div>
         <div class="preview"><div class="subj">Subject: ${esc(c.subject)}</div>${esc(c.body)}</div>
       </div>`;
     }).join('');

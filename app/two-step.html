@@ -47,7 +47,7 @@
   const { client, rpc, showMessage } = STA;
   const $ = id => document.getElementById(id);
   const nextParam = new URLSearchParams(location.search).get('next') || '';
-  const next = /^[a-z-]+\.html(\?[\w=&%-]*)?$/.test(nextParam) ? nextParam : 'developer.html';
+  const next = /^[a-z-]+\.html(\?[\w=&%-]*)?$/.test(nextParam) ? nextParam : 'members.html';
   let factorId = null;
   const SETUP_KEY = 'sta-two-step-setup';
 
