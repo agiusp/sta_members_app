@@ -39,7 +39,7 @@ Deno.serve(async (req) => {
     return reply({ error: "Add this email as an active member before inviting it." }, 400);
   }
   if (!account.membership_current) {
-    return reply({ error: "This member's membership has lapsed. Mark it current once dues are paid, then invite them." }, 400);
+    return reply({ error: "This member is Inactive. Mark them Active once dues are paid, then send the invite." }, 400);
   }
   // Resending: an invite that was never accepted is replaced by a fresh one
   // (the unaccepted sign-in user holds no data).

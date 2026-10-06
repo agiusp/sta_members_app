@@ -118,13 +118,13 @@ figure { margin: 0; }
   <div class="kicker">What it does</div><h2>Everything members need, in one app</h2>
   <div class="cards">
     <div class="card"><h3>News</h3><p>Club announcements, posted by the organizers.</p></div>
-    <div class="card"><h3>Sunday Doubles</h3><p>Sign up each week, see your court, and review your game afterwards.</p></div>
+    <div class="card"><h3>Sunday Doubles</h3><p>For approved advanced players: sign up each week, see your court, and review your game.</p></div>
     <div class="card"><h3>Casual Play</h3><p>Post when you're free and get introduced to players at your level who are free too.</p></div>
     <div class="card dev"><h3>Developers</h3><p>For organizers: members, the court Scheduler, emails and settings.</p></div>
   </div>
   <ul class="wide">
     <li>Works in any web browser, on phones and computers. Nothing to install.</li>
-    <li>Members sign in with their email and a password. Only people on the member list can get in.</li>
+    <li>Members sign in with their email and a password. Only Active members on the club list can use it; Sunday Doubles is only for players the program manager approves.</li>
     <li>Reminders, court assignments and Casual Play introductions go out by email automatically.</li>
     <li>Matches the look of statennis.com, with a link back to the club website.</li>
   </ul>
@@ -133,7 +133,7 @@ figure { margin: 0; }
   <div class="kicker">Part 1</div><h1>For members</h1><p>What a member sees and does, week to week.</p>
 </section>
 <section class="slide split">
-  <div class="text"><div class="kicker">Members</div><h2>Signing in</h2><ul><li>Each member gets an invitation email and chooses a password.</li><li>Only members on the club list can get an account. There is no public sign-up.</li><li>"Forgot password" sends a reset link by email.</li></ul></div>
+  <div class="text"><div class="kicker">Members</div><h2>Signing in</h2><ul><li>Each member gets an invitation email and chooses a password.</li><li>Only members on the club list can get an account, and only while their membership is Active. There is no public sign-up.</li><li>Members whose dues aren't paid can sign in but see only a reminder to renew.</li><li>"Forgot password" sends a reset link by email.</li></ul></div>
   <div class="visual"><figure class="browser"><div class="bar"><i></i><i></i><i></i><span>agiusp.github.io/sta_members_app/app/</span></div>
   <img src="img/m-signin.webp" alt="Sign-in page" loading="lazy"></figure></div>
 </section>
@@ -143,7 +143,7 @@ figure { margin: 0; }
   <img src="img/m-news.webp" alt="News page" loading="lazy"></figure></div>
 </section>
 <section class="slide split">
-  <div class="text"><div class="kicker">Sunday Doubles · email</div><h2>Every Monday: sign-ups open</h2><ul><li>At 9am Monday every member gets this email, with a link straight to the sign-up page.</li><li>It also asks last week's players to review their game.</li><li>The wording of every email can be changed by the organizers, in the app.</li></ul></div>
+  <div class="text"><div class="kicker">Sunday Doubles · email</div><h2>Every Monday: sign-ups open</h2><ul><li>At 9am Monday every approved Sunday Doubles player gets this email, with a link straight to the sign-up page.</li><li>It also asks last week's players to review their game.</li><li>The wording of every email can be changed by the organizers, in the app.</li></ul></div>
   <div class="visual"><div class="mail">
   <div class="mail-head">
     <div class="mail-subject">Sunday Doubles, October 11: sign-ups are open</div>
@@ -170,7 +170,7 @@ What to know:
 </div></div>
 </section>
 <section class="slide split stacked">
-  <div class="text"><div class="kicker">Sunday Doubles</div><h2>Signing up for Sunday</h2><ul><li>One tap to sign up, one tap to cancel, until noon Saturday.</li><li>Spots go in the order people sign up. When the courts are full, later sign-ups join a waitlist.</li><li>Family members on one account are each signed up separately.</li></ul></div>
+  <div class="text"><div class="kicker">Sunday Doubles</div><h2>Signing up for Sunday</h2><ul><li>Sunday Doubles appears only for players approved by the program manager.</li><li>One tap to sign up, one tap to cancel, until noon Saturday.</li><li>Spots go in the order people sign up. When the courts are full, later sign-ups join a waitlist.</li></ul></div>
   <div class="visual"><div class="pair"><figure class="browser"><div class="bar"><i></i><i></i><i></i><span>agiusp.github.io/sta_members_app/app/</span></div>
   <img src="img/m-signup-before.webp" alt="Sign-up page before signing up" loading="lazy"></figure><figure class="browser"><div class="bar"><i></i><i></i><i></i><span>agiusp.github.io/sta_members_app/app/</span></div>
   <img src="img/m-signup-after.webp" alt="After signing up" loading="lazy"></figure></div></div>
@@ -302,12 +302,17 @@ Your name is hidden for that time, so they don&#x27;t know about you yet. To get
   <img src="img/d-lineup.webp" alt="This week&#x27;s line-up" loading="lazy"></figure></div>
 </section>
 <section class="slide split">
-  <div class="text"><div class="kicker">Developers · Members and this week</div><h2>Members</h2><ul><li>Add members (an account can hold several family members), invite them, or invite everyone not yet invited in one click.</li><li>See who has an account, whose membership is current, and who the developers are.</li></ul></div>
+  <div class="text"><div class="kicker">Developers · Members and this week</div><h2>The Members Table</h2><ul><li>One row per person: Name, Email, <b>Membership</b> (Active or Inactive), <b>Sunday Doubles</b> (Yes or No) and <b>App Access</b>, plus level, sex and developer.</li><li>Change Membership or Sunday Doubles right in the table. Inactive members are locked out until marked Active again.</li><li>App Access shows who has joined: new members are "Pending STA Member App Invitation" until a developer clicks Send Invite.</li></ul></div>
   <div class="visual"><figure class="browser"><div class="bar"><i></i><i></i><i></i><span>agiusp.github.io/sta_members_app/app/</span></div>
-  <img src="img/d-members.webp" alt="Members list" loading="lazy"></figure></div>
+  <img src="img/d-members.webp" alt="The Members Table" loading="lazy"></figure></div>
 </section>
 <section class="slide split">
-  <div class="text"><div class="kicker">Developers · Members and this week</div><h2>Upload the current member list</h2><ul><li>Upload the club's membership export (CSV). Members are matched by email or name.</li><li>The app shows exactly what will change before anything happens. Members not on the list are marked lapsed and can't sign up until dues are paid.</li></ul></div>
+  <div class="text"><div class="kicker">Developers · Members and this week</div><h2>Adding a member</h2><ul><li>Enter the name, email, level and sex, and choose Membership and Sunday Doubles.</li><li>Then click Send Invite (or Send Invite to all pending) and the member gets an email to set their password.</li></ul></div>
+  <div class="visual"><figure class="browser"><div class="bar"><i></i><i></i><i></i><span>agiusp.github.io/sta_members_app/app/</span></div>
+  <img src="img/d-member-add.webp" alt="Adding a member" loading="lazy"></figure></div>
+</section>
+<section class="slide split">
+  <div class="text"><div class="kicker">Developers · Members and this week</div><h2>Upload the current member list</h2><ul><li>Upload the club's membership export (CSV). Members are matched by email or name.</li><li>The app shows exactly what will change before anything happens. Members not on the list are marked Inactive and see only the dues reminder until they renew.</li></ul></div>
   <div class="visual"><figure class="browser"><div class="bar"><i></i><i></i><i></i><span>agiusp.github.io/sta_members_app/app/</span></div>
   <img src="img/d-member-upload.webp" alt="Uploading the current member list" loading="lazy"></figure></div>
 </section>
@@ -364,7 +369,7 @@ Your name is hidden for that time, so they don&#x27;t know about you yet. To get
 <section class="slide overview">
   <div class="kicker">Privacy and security</div><h2>Built to keep members' details safe</h2>
   <ul class="wide">
-    <li>Only invited members can sign in. Each member sees only what they need: other players' names on the courts, and on Casual Play only what each player chooses to show.</li>
+    <li>Only invited, Active members can use the app, and only approved players see Sunday Doubles. Each member sees only what they need: other players' names on the courts, and on Casual Play only what each player chooses to show.</li>
     <li>Email addresses are shared only between Casual Play players who both chose to show their name.</li>
     <li>The rules are enforced by the database itself, not just the pages, and have been through a security review.</li>
     <li>Developers need two-step sign-in. Passwords are handled by a professional sign-in service (Supabase) and stored only in scrambled form.</li>
@@ -376,7 +381,7 @@ Your name is hidden for that time, so they don&#x27;t know about you yet. To get
   <div class="cards three">
     <div class="card"><h3>Email from statennis.com</h3><p>The club's Wix administrator adds 3–4 email records, about 15 minutes, so emails come from <b>mail.statennis.com</b> and don't land in spam. The website and club email are untouched.</p></div>
     <div class="card"><h3>Running costs</h3><p>Free to start: hosting, database and email all have free plans. An optional $25/month database plan adds automatic daily backups.</p></div>
-    <div class="card"><h3>Roll-out</h3><p>Load the member list, invite a few members to try it, then invite everyone. Volunteers run it from the Developers pages; no programming needed week to week.</p></div>
+    <div class="card"><h3>Roll-out</h3><p>Load the Members Table and mark the Sunday Doubles players, invite a few members to try it, then invite everyone. Volunteers run it from the Developers pages; no programming needed week to week.</p></div>
   </div>
   <p class="sub">Try it yourself: <b>https://agiusp.github.io/sta_members_app/app/</b><br>Ask for the demo sign-in details. All players in the demo are made up.</p>
 </section>

@@ -6,6 +6,17 @@
 <title>Developers</title>
 <link rel="stylesheet" href="styles.css">
 <style>
+  body { --page-width: 1180px; }
+  table.members td { vertical-align: top; }
+  table.members td.access { min-width: 230px; }
+  table.members button { white-space: nowrap; }
+  table.members select { min-height: 32px; padding: 3px 6px; font-size: 13px; }
+  table.members input:not([type=checkbox]) { min-height: 32px; padding: 3px 6px; font-size: 13px; }
+  table.members tr.inactive td { color: var(--muted); }
+  table.members tr.editing td { background: #f4f3fa; }
+  button.small { min-height: 30px; padding: 4px 10px; font-size: 13px; margin-top: 4px; }
+  .nowrap { white-space: nowrap; }
+  .member-form { display: flex; flex-wrap: wrap; gap: 10px 12px; align-items: end; margin-top: 10px; }
   .upload-box { border: 1px dashed #cbd2d9; border-radius: 8px; padding: 12px 14px; margin: 4px 0 16px; background: #fbfbfc; }
   .upload-box details { margin-top: 8px; font-size: 13px; }
   .upload-box summary { cursor: pointer; font-weight: 600; }
@@ -69,8 +80,8 @@
   </section>
 
   <section class="panel">
-    <div class="panel-title">Message for lapsed members</div>
-    <p class="muted">Shown to members whose membership hasn't been renewed when they try to sign up.</p>
+    <div class="panel-title">Message for Inactive members</div>
+    <p class="muted">Inactive members can still sign in, but see only this message until a developer marks them Active again.</p>
     <div class="row">
       <label style="flex:1; min-width:240px">Message
         <textarea id="duesInput" rows="3" style="font:inherit;font-size:14px;padding:8px 9px;border:1px solid #cbd2d9;border-radius:6px"></textarea></label>
@@ -80,42 +91,49 @@
   </section>
 
   <section class="panel">
-    <div class="panel-title">Members</div>
-    <p class="muted">Add a player to a new email, or to an existing email to link a family member. Then send the setup-invite so they can set a password.
-      Members stay on this list once they have an account. Mark a member <em>lapsed</em> if they haven't renewed: they keep their account but can't sign up until they're marked current again.</p>
-    <div class="upload-box">
-      <div class="panel-title" style="margin-bottom:4px">Upload current members</div>
-      <p class="muted" style="margin-top:0">Upload the club's list of current members as a CSV or TSV file (in Excel or Google Sheets: File &gt; Download/Save as CSV).
-        It needs an Email column and/or First and Last name columns, like the membership export. Members in the file are marked <em>current</em>;
-        everyone else is marked <em>lapsed</em>. You'll see exactly what will change before anything is saved.</p>
+    <div class="panel-title">Members Table</div>
+    <p class="muted" style="margin-top:0">One row per person, each with their own email address.
+      <strong>Membership:</strong> only Active members can use the app; Inactive members see the message above.
+      <strong>Sunday Doubles:</strong> only Active members with Yes see the Sunday Doubles pages and get its emails.
+      <strong>App Access</strong> shows whether the member has joined: new members are <em>Pending STA Member App Invitation</em> until you click Send Invite.</p>
+    <details class="upload-box" id="addBox">
+      <summary class="panel-title" style="margin:0;cursor:pointer">Add a member</summary>
+      <form id="addForm" class="member-form">
+        <label>First name <input id="addFirst" required></label>
+        <label>Last name <input id="addLast" required></label>
+        <label>Email <input type="email" id="addEmail" required></label>
+        <label>Level <input id="addLevel" size="4" placeholder="3.5"></label>
+        <label>Sex <select id="addSex"><option value="">?</option><option>M</option><option>F</option></select></label>
+        <label>Membership <select id="addActive"><option value="true">Active</option><option value="false">Inactive</option></select></label>
+        <label>Sunday Doubles <select id="addSunday"><option value="false">No</option><option value="true">Yes</option></select></label>
+        <label class="check"><input type="checkbox" id="addDev"> Developer</label>
+        <button type="submit">Add</button>
+      </form>
+    </details>
+    <details class="upload-box">
+      <summary class="panel-title" style="margin:0;cursor:pointer">Upload the club's current member list</summary>
+      <p class="muted">Upload the club's list of current members as a CSV or TSV file (in Excel or Google Sheets: File &gt; Download/Save as CSV).
+        It needs an Email column and/or First and Last name columns, like the membership export. Members in the file are marked <em>Active</em>;
+        everyone else is marked <em>Inactive</em>. You'll see exactly what will change before anything is saved.</p>
       <input type="file" id="memberFile" accept=".csv,.tsv,.txt,text/csv,text/tab-separated-values">
       <div id="uploadPreview"></div>
-    </div>
-    <form id="addForm" class="row">
-      <label>Email <input type="email" id="addEmail" required></label>
-      <label>First name <input id="addFirst" required></label>
-      <label>Last name <input id="addLast" required></label>
-      <label>Level <input id="addLevel" size="4" placeholder="3.5"></label>
-      <label>Sex
-        <select id="addSex"><option value="">?</option><option>M</option><option>F</option></select></label>
-      <label class="check"><input type="checkbox" id="addDev"> Developer</label>
-      <button type="submit">Add</button>
-    </form>
-    <div class="row" style="margin-top:12px">
-      <button class="secondary" id="inviteAllBtn">Invite all current members not yet invited</button>
-      <span class="muted" id="inviteAllHint"></span>
-    </div>
+    </details>
     <div class="row" style="margin-top:12px">
       <label>Show
         <select id="memberFilter">
           <option value="all">All members</option>
-          <option value="needs_invite">Current members without an account</option>
-          <option value="active">Has an account</option>
-          <option value="lapsed">Lapsed</option>
+          <option value="active">Active</option>
+          <option value="inactive">Inactive</option>
+          <option value="sunday">Sunday Doubles: Yes</option>
+          <option value="pending">Pending STA Member App Invitation</option>
+          <option value="invited">Invited, not joined yet</option>
+          <option value="joined">App Access: Yes</option>
+          <option value="developers">Developers</option>
         </select></label>
-      <span class="muted" id="memberCounts"></span>
+      <label>Search <input id="memberSearch" placeholder="Name or email"></label>
+      <button class="secondary" id="inviteAllBtn">Send Invite to all pending</button>
     </div>
-    <p class="muted" id="developerList"></p>
+    <p class="muted" id="memberCounts"></p>
     <div id="membersMsg"></div>
     <div class="table-wrap" id="members" style="margin-top:12px"></div>
   </section>
@@ -293,70 +311,179 @@
     await loadWeek();
   });
 
-  // ---------- Members ----------
-  let notInvited = [];
-
+  // ---------- Members Table ----------
+  // One row per person: { player_id, first_name, last_name, email, level, sex,
+  // membership ('active'/'inactive'), sunday_doubles, is_developer,
+  // app_access ('yes'/'invited'/'pending'), invited_at }.
   let memberRows = [];
+  let editingId = null;
+  const fullName = m => `${m.first_name} ${m.last_name}`;
 
   async function loadMembers() {
-    const [{ data: accounts, error: e1 }, { data: players, error: e2 }] = await Promise.all([
-      client.rpc('dev_members'),
-      client.from('players').select('id, account_email, first_name, last_name, level, sex, active').order('last_name')
-    ]);
-    if (e1 || e2) { showMessage($('membersMsg'), (e1 || e2).message); return; }
-    const byEmail = new Map(accounts.map(a => [a.email, { ...a, players: [] }]));
-    players.forEach(p => byEmail.get(p.account_email)?.players.push(p));
-    // Members who need attention first: current without an account, then
-    // invited but not accepted, then with an account, then lapsed.
-    const rank = a => !a.active ? 4 : !a.membership_current ? 3 : { not_invited: 0, invited: 1, active: 2 }[a.signin_status];
-    const lastName = a => (a.players[0]?.last_name || a.email).toLowerCase();
-    memberRows = [...byEmail.values()]
-      .sort((a, b) => rank(a) - rank(b) || lastName(a).localeCompare(lastName(b)));
-
-    const needsInvite = a => a.active && a.membership_current && a.signin_status !== 'active';
-    notInvited = memberRows.filter(a => a.active && a.membership_current && a.signin_status === 'not_invited').map(a => a.email);
-    $('inviteAllBtn').disabled = notInvited.length === 0;
-    $('inviteAllHint').textContent = notInvited.length
-      ? `${notInvited.length} current member(s) not invited yet. Invites that weren't accepted are resent one at a time below.`
-      : 'Every current member has been invited.';
-    const devs = memberRows.filter(a => a.is_developer && a.active);
-    $('developerList').textContent = 'Developers (get the Saturday reminder emails): ' + devs.map(a =>
-      (a.players[0] ? `${a.players[0].first_name} ${a.players[0].last_name}` : a.email) + ` <${a.email}>`).join(', ');
-    $('memberCounts').textContent =
-      `${memberRows.length} members: ${memberRows.filter(needsInvite).length} current without an account, ` +
-      `${memberRows.filter(a => a.signin_status === 'active').length} with an account, ` +
-      `${memberRows.filter(a => !a.membership_current).length} lapsed`;
+    memberRows = await rpc('dev_members');
+    const n = f => memberRows.filter(f).length;
+    $('memberCounts').textContent = `${memberRows.length} members: ${n(m => m.membership === 'active')} Active, ` +
+      `${n(m => m.membership === 'inactive')} Inactive · ${n(m => m.membership === 'active' && m.sunday_doubles)} Active Sunday Doubles players · ` +
+      `App Access: ${n(m => m.app_access === 'yes')} joined, ${n(m => m.app_access === 'invited')} invited, ` +
+      `${n(m => m.membership === 'active' && m.app_access === 'pending')} Active members pending invitation`;
+    const pending = memberRows.filter(m => m.membership === 'active' && m.app_access === 'pending');
+    $('inviteAllBtn').disabled = !pending.length;
+    $('inviteAllBtn').textContent = pending.length ? `Send Invite to all ${pending.length} pending` : 'No invitations pending';
     renderMembers();
+  }
+
+  function appAccess(m) {
+    if (m.app_access === 'yes') return '<strong>Yes</strong>';
+    const can = m.membership === 'active';
+    const status = m.app_access === 'invited'
+      ? `No <span class="muted">· Invited ${esc(fmtDateTime(m.invited_at))}, not joined yet</span>`
+      : 'No <span class="muted">· Pending STA Member App Invitation</span>';
+    const btn = can ? `<br><button class="${m.app_access === 'invited' ? 'secondary' : ''} small" data-invite="${esc(m.email)}">${m.app_access === 'invited' ? 'Resend Invite' : 'Send Invite'}</button>`
+      : '<br><span class="muted">Mark Active to invite</span>';
+    return status + btn;
   }
 
   function renderMembers() {
     const f = $('memberFilter').value;
-    const rows = memberRows.filter(a =>
-      f === 'all' ? true :
-      f === 'needs_invite' ? a.active && a.membership_current && a.signin_status !== 'active' :
-      f === 'active' ? a.signin_status === 'active' :
-      !a.membership_current);
-
-    $('members').innerHTML = rows.length ? `<table>
-      <tr><th>Email</th><th>Players</th><th>Membership</th><th>Account</th><th></th></tr>
-      ${rows.map(a => `<tr>
-        <td>${esc(a.email)}${a.is_developer ? ' <span class="badge none">developer</span>' : ''}${a.active ? '' : ' <span class="badge wait">removed</span>'}
-          ${a.active ? `<br><a class="link-button" data-developer="${esc(a.email)}" data-is-dev="${a.is_developer}">${a.is_developer ? 'Remove as developer' : 'Make developer'}</a>` : ''}</td>
-        <td>${a.players.map(p => `${esc(p.first_name)} ${esc(p.last_name)} <span class="muted">(${esc(p.level || '?')}, ${esc(p.sex || '?')})</span>`).join('<br>')}</td>
-        <td>${a.membership_current ? 'Current' : '<span class="badge wait">Lapsed</span>'}
-          <a class="link-button" data-membership="${esc(a.email)}" data-current="${a.membership_current}">${a.membership_current ? 'Mark lapsed' : 'Mark current'}</a></td>
-        <td>${{
-          active: 'Has account',
-          invited: `<span class="muted">Invited ${esc(fmtDateTime(a.invited_at))}, not accepted yet</span>`,
-          not_invited: '<span class="muted">No account yet</span>'
-        }[a.signin_status]}</td>
-        <td>${a.signin_status === 'active' || !a.membership_current || !a.active ? '' :
-          `<button class="secondary" data-invite="${esc(a.email)}">${a.signin_status === 'invited' ? 'Resend invite' : 'Send invite'}</button>`}</td>
+    const q = $('memberSearch').value.trim().toLowerCase();
+    const rows = memberRows.filter(m =>
+      (f === 'all' || (f === 'active' && m.membership === 'active') || (f === 'inactive' && m.membership === 'inactive') ||
+       (f === 'sunday' && m.sunday_doubles) || (f === 'pending' && m.app_access === 'pending') ||
+       (f === 'invited' && m.app_access === 'invited') || (f === 'joined' && m.app_access === 'yes') ||
+       (f === 'developers' && m.is_developer)) &&
+      (!q || fullName(m).toLowerCase().includes(q) || m.email.includes(q)));
+    const sel = (field, value, options) => `<select data-field="${field}" aria-label="${field}">${options.map(([v, label]) =>
+      `<option value="${v}" ${String(value) === v ? 'selected' : ''}>${label}</option>`).join('')}</select>`;
+    $('members').innerHTML = rows.length ? `<table class="members">
+      <tr><th>Name</th><th>Email</th><th>Membership</th><th>Sunday Doubles</th><th>App Access</th><th>Level</th><th>Sex</th><th>Developer</th><th></th></tr>
+      ${rows.map(m => m.player_id === editingId ? `<tr data-id="${m.player_id}" class="editing">
+        <td><input data-edit="first_name" value="${esc(m.first_name)}" aria-label="First name" size="9">
+            <input data-edit="last_name" value="${esc(m.last_name)}" aria-label="Last name" size="10"></td>
+        <td><input data-edit="email" type="email" value="${esc(m.email)}" aria-label="Email" ${m.app_access === 'yes' ? 'disabled title="This member has joined; their email can\'t be changed here"' : ''}></td>
+        <td>${sel('active', m.membership === 'active', [['true', 'Active'], ['false', 'Inactive']])}</td>
+        <td>${sel('sunday', m.sunday_doubles, [['true', 'Yes'], ['false', 'No']])}</td>
+        <td class="access">${appAccess(m)}</td>
+        <td><input data-edit="level" value="${esc(m.level || '')}" aria-label="Level" size="3" placeholder="3.5"></td>
+        <td>${sel('sex', m.sex || '', [['', '?'], ['M', 'M'], ['F', 'F']])}</td>
+        <td><input type="checkbox" data-field="developer" ${m.is_developer ? 'checked' : ''} aria-label="Developer"></td>
+        <td class="nowrap"><button class="small" data-act="save">Save</button> <button class="secondary small" data-act="cancel">Cancel</button></td>
+      </tr>` : `<tr data-id="${m.player_id}" class="${m.membership === 'inactive' ? 'inactive' : ''}">
+        <td>${esc(fullName(m))}</td>
+        <td>${esc(m.email)}</td>
+        <td>${sel('active', m.membership === 'active', [['true', 'Active'], ['false', 'Inactive']])}</td>
+        <td>${sel('sunday', m.sunday_doubles, [['true', 'Yes'], ['false', 'No']])}</td>
+        <td class="access">${appAccess(m)}</td>
+        <td>${esc(m.level || '?')}</td>
+        <td>${esc(m.sex || '?')}</td>
+        <td><input type="checkbox" data-field="developer" ${m.is_developer ? 'checked' : ''} aria-label="Developer"></td>
+        <td><button class="secondary small" data-act="edit">Edit</button></td>
       </tr>`).join('')}
-    </table>` : '<p class="muted">No members match this filter.</p>';
+    </table>` : '<p class="muted">No members match.</p>';
+  }
+
+  // Saves one member: the row's current values, with any changes.
+  async function saveMember(m, changes) {
+    const v = { first_name: m.first_name, last_name: m.last_name, email: m.email, level: m.level, sex: m.sex,
+                active: m.membership === 'active', sunday: m.sunday_doubles, developer: m.is_developer, ...changes };
+    await rpc('dev_save_member', { p_player_id: m.player_id, p_first_name: v.first_name, p_last_name: v.last_name,
+      p_email: v.email, p_level: v.level, p_sex: v.sex, p_active: v.active, p_sunday_doubles: v.sunday, p_developer: v.developer });
   }
 
   $('memberFilter').addEventListener('change', renderMembers);
+  $('memberSearch').addEventListener('input', renderMembers);
+
+  // Membership, Sunday Doubles and Developer save as soon as they change
+  // (except while a row is being edited: then Save saves everything).
+  $('members').addEventListener('change', async e => {
+    const tr = e.target.closest('tr[data-id]');
+    const field = e.target.dataset.field;
+    if (!tr || !field || tr.classList.contains('editing')) return;
+    const m = memberRows.find(x => x.player_id === Number(tr.dataset.id));
+    const value = field === 'developer' ? e.target.checked : e.target.value === 'true';
+    if (field === 'developer' && !value && !confirm(`Remove ${fullName(m)} as a developer? They'll lose access to the Developers pages.`)) {
+      e.target.checked = true; return;
+    }
+    showMessage($('membersMsg'), '');
+    try {
+      await saveMember(m, { [field]: value });
+      const what = { active: value ? 'Active' : 'Inactive', sunday: `Sunday Doubles: ${value ? 'Yes' : 'No'}`,
+                     developer: value ? 'now a developer' : 'no longer a developer' }[field];
+      showMessage($('membersMsg'), `${fullName(m)}: ${what}.`, 'ok');
+    } catch (err) { showMessage($('membersMsg'), err.message); }
+    await loadMembers();
+  });
+
+  $('members').addEventListener('click', async e => {
+    const tr = e.target.closest('tr[data-id]');
+    const m = tr && memberRows.find(x => x.player_id === Number(tr.dataset.id));
+    const act = e.target.closest('[data-act]')?.dataset.act;
+    if (act === 'edit') { editingId = m.player_id; renderMembers(); return; }
+    if (act === 'cancel') { editingId = null; renderMembers(); return; }
+    if (act === 'save') {
+      const val = k => tr.querySelector(`[data-edit="${k}"]`).value.trim();
+      const pick = k => tr.querySelector(`[data-field="${k}"]`);
+      try {
+        await saveMember(m, { first_name: val('first_name'), last_name: val('last_name'), email: val('email').toLowerCase(),
+          level: val('level') || null, sex: pick('sex').value || null, active: pick('active').value === 'true',
+          sunday: pick('sunday').value === 'true', developer: pick('developer').checked });
+        editingId = null;
+        showMessage($('membersMsg'), `Saved ${val('first_name')} ${val('last_name')}.`, 'ok');
+        await loadMembers();
+      } catch (err) { showMessage($('membersMsg'), err.message); }
+      return;
+    }
+    const b = e.target.closest('button[data-invite]');
+    if (!b) return;
+    b.disabled = true;
+    showMessage($('membersMsg'), '');
+    const err = await sendInvite(b.dataset.invite);
+    if (err) { showMessage($('membersMsg'), err); b.disabled = false; return; }
+    showMessage($('membersMsg'), `Invitation sent to ${b.dataset.invite}. The link works for 24 hours.`, 'ok');
+    await loadMembers();
+  });
+
+  $('addForm').addEventListener('submit', async e => {
+    e.preventDefault();
+    showMessage($('membersMsg'), '');
+    try {
+      await rpc('dev_save_member', { p_player_id: null, p_first_name: $('addFirst').value, p_last_name: $('addLast').value,
+        p_email: $('addEmail').value, p_level: $('addLevel').value, p_sex: $('addSex').value || null,
+        p_active: $('addActive').value === 'true', p_sunday_doubles: $('addSunday').value === 'true', p_developer: $('addDev').checked });
+      showMessage($('membersMsg'), `Added ${$('addFirst').value.trim()} ${$('addLast').value.trim()}. App Access: Pending STA Member App Invitation. Click Send Invite when you're ready.`, 'ok');
+      $('addForm').reset();
+      await loadMembers();
+    } catch (err) { showMessage($('membersMsg'), err.message); }
+  });
+
+  // Returns null on success, or the error message.
+  async function sendInvite(email) {
+    const { error } = await client.functions.invoke('invite-member', {
+      body: { email, redirectTo: new URL('./', location.href).href }
+    });
+    if (!error) return null;
+    try { return (await error.context.json()).error || error.message; }
+    catch (_) { return error.message; }
+  }
+
+  // One at a time, so a problem with one email doesn't stop the rest and the
+  // email service isn't flooded.
+  $('inviteAllBtn').addEventListener('click', async () => {
+    const emails = memberRows.filter(m => m.membership === 'active' && m.app_access === 'pending').map(m => m.email);
+    if (!emails.length) return;
+    if (!confirm(`Send the STA Members App invitation to ${emails.length} Active member(s) who haven't been invited yet?`)) return;
+    $('inviteAllBtn').disabled = true;
+    const failed = [];
+    for (let i = 0; i < emails.length; i++) {
+      showMessage($('membersMsg'), `Sending invitation ${i + 1} of ${emails.length}…`, 'ok');
+      const err = await sendInvite(emails[i]);
+      if (err) failed.push(`${emails[i]}: ${err}`);
+    }
+    const sent = emails.length - failed.length;
+    showMessage($('membersMsg'),
+      `Sent ${sent} invitation(s).` + (failed.length ? ` ${failed.length} failed: ${failed.join('; ')}` : ''),
+      failed.length ? 'error' : 'ok');
+    await loadMembers();
+  });
 
   // ---------- Upload current members ----------
   // "Mary-Ann  O'Brien" -> "maryann obrien": ignores case, accents and punctuation.
@@ -383,38 +510,35 @@
 
   let pendingCurrent = null; // emails to mark current, once confirmed
 
-  function accountLabel(a) {
-    const names = a.players.map(p => `${p.first_name} ${p.last_name}`).join(', ');
-    return `${names || a.email}${names ? ` <${a.email}>` : ''}${a.is_developer ? ' (developer)' : ''}`;
-  }
+  const memberLabel = m => `${fullName(m)} <${m.email}>${m.is_developer ? ' (developer)' : ''}`;
 
   function previewMemberList(people) {
     const emails = new Set(people.map(p => p.email).filter(Boolean));
     const names = new Set(people.map(p => p.name).filter(Boolean));
-    const accounts = memberRows.filter(a => a.active);
-    const inFile = a => emails.has(a.email) || a.players.some(p => names.has(normName(`${p.first_name} ${p.last_name}`)));
-    const current = accounts.filter(inFile);
-    const lapsed = accounts.filter(a => !inFile(a));
-    const known = new Set(accounts.map(a => a.email));
-    const knownNames = new Set(accounts.flatMap(a => a.players.map(p => normName(`${p.first_name} ${p.last_name}`))));
+    const inFile = m => emails.has(m.email) || names.has(normName(fullName(m)));
+    const current = memberRows.filter(inFile);
+    const lapsed = memberRows.filter(m => !inFile(m));
+    const known = new Set(memberRows.map(m => m.email));
+    const knownNames = new Set(memberRows.map(m => normName(fullName(m))));
     const unknown = people.filter(p => !known.has(p.email) && !knownNames.has(p.name));
-    const newlyCurrent = current.filter(a => !a.membership_current);
-    const newlyLapsed = lapsed.filter(a => a.membership_current);
+    const isActive = m => m.membership === 'active';
+    const newlyCurrent = current.filter(m => !isActive(m));
+    const newlyLapsed = lapsed.filter(isActive);
     const list = (title, arr, open) => arr.length ? `<details ${open ? 'open' : ''}><summary>${esc(title)} (${arr.length})</summary>
-      <ul>${arr.map(x => `<li>${esc(typeof x === 'string' ? x : accountLabel(x))}</li>`).join('')}</ul></details>` : '';
+      <ul>${arr.map(x => `<li>${esc(typeof x === 'string' ? x : memberLabel(x))}</li>`).join('')}</ul></details>` : '';
     pendingCurrent = current.map(a => a.email);
     $('uploadPreview').innerHTML = `<div class="msg ${current.length ? 'ok' : 'error'}" style="color:var(--ink)">
         <strong>${people.length}</strong> people in the file. If you apply it:
-        <strong>${current.length}</strong> member account(s) will be current and <strong>${lapsed.length}</strong> lapsed
-        (${newlyCurrent.length} change to current, ${newlyLapsed.length} change to lapsed).
-        ${list('Changing to lapsed', newlyLapsed, true)}
-        ${list('Changing to current', newlyCurrent, true)}
-        ${list('In the file but not in the app (add them below if they should be)', unknown.map(p => p.label), unknown.length <= 15)}
-        ${list('Staying current', current.filter(a => a.membership_current), false)}
-        ${list('Staying lapsed', lapsed.filter(a => !a.membership_current), false)}
+        <strong>${current.length}</strong> member(s) will be Active and <strong>${lapsed.length}</strong> Inactive
+        (${newlyCurrent.length} change to Active, ${newlyLapsed.length} change to Inactive).
+        ${list('Changing to Inactive', newlyLapsed, true)}
+        ${list('Changing to Active', newlyCurrent, true)}
+        ${list('In the file but not in the app (add them with Add a member if they should be)', unknown.map(p => p.label), unknown.length <= 15)}
+        ${list('Staying Active', current.filter(isActive), false)}
+        ${list('Staying Inactive', lapsed.filter(m => !isActive(m)), false)}
       </div>
       <div class="row" style="margin-top:10px">
-        <button id="applyListBtn" ${current.length ? '' : 'disabled'}>Apply: ${current.length} current, ${lapsed.length} lapsed</button>
+        <button id="applyListBtn" ${current.length ? '' : 'disabled'}>Apply: ${current.length} Active, ${lapsed.length} Inactive</button>
         <button class="secondary" id="cancelListBtn">Cancel</button>
       </div>`;
     if (!current.length) showMessage($('membersMsg'), 'Nobody in the file matches a member in the app by email or name, so it cannot be applied. Check that it is the right file.');
@@ -444,7 +568,7 @@
     try {
       const r = await rpc('dev_set_current_members', { p_current_emails: pendingCurrent });
       $('uploadPreview').innerHTML = ''; $('memberFile').value = ''; pendingCurrent = null;
-      showMessage($('membersMsg'), `Member list applied: ${r.current} current, ${r.lapsed} lapsed. Lapsed members can still sign in, but see the dues message instead of signing up.`, 'ok');
+      showMessage($('membersMsg'), `Member list applied: ${r.current} Active, ${r.lapsed} Inactive. Inactive members can still sign in, but see only the dues message.`, 'ok');
       await loadMembers();
     } catch (err) { e.target.disabled = false; showMessage($('membersMsg'), err.message); }
   });
@@ -454,88 +578,6 @@
     if (!text) { showMessage($('duesMsg'), 'The message cannot be empty.'); return; }
     const { error } = await client.from('settings').update({ dues_message: text }).eq('id', true);
     showMessage($('duesMsg'), error ? error.message : 'Message saved.', error ? 'error' : 'ok');
-  });
-
-  $('addForm').addEventListener('submit', async e => {
-    e.preventDefault();
-    showMessage($('membersMsg'), '');
-    const email = $('addEmail').value.trim().toLowerCase();
-    const { error: accErr } = await client.from('accounts')
-      .upsert({ email, is_developer: $('addDev').checked }, { onConflict: 'email', ignoreDuplicates: true });
-    if (accErr) { showMessage($('membersMsg'), accErr.message); return; }
-    const { error } = await client.from('players').insert({
-      account_email: email,
-      first_name: $('addFirst').value.trim(),
-      last_name: $('addLast').value.trim(),
-      level: $('addLevel').value.trim() || null,
-      sex: $('addSex').value || null
-    });
-    if (error) { showMessage($('membersMsg'), error.message); return; }
-    showMessage($('membersMsg'), `Added ${$('addFirst').value} ${$('addLast').value}.`, 'ok');
-    $('addForm').reset();
-    await loadMembers();
-  });
-
-  // Returns null on success, or the error message.
-  async function sendInvite(email) {
-    const { error } = await client.functions.invoke('invite-member', {
-      body: { email, redirectTo: new URL('./', location.href).href }
-    });
-    if (!error) return null;
-    try { return (await error.context.json()).error || error.message; }
-    catch (_) { return error.message; }
-  }
-
-  $('members').addEventListener('click', async e => {
-    const dv = e.target.closest('[data-developer]');
-    if (dv) {
-      const makeDev = dv.dataset.isDev !== 'true';
-      if (!makeDev && !confirm(`Remove ${dv.dataset.developer} as a developer? They'll lose access to the Developers pages.`)) return;
-      const { error } = await client.from('accounts')
-        .update({ is_developer: makeDev }).eq('email', dv.dataset.developer);
-      showMessage($('membersMsg'), error ? error.message
-        : `${dv.dataset.developer} is ${makeDev ? 'now a developer' : 'no longer a developer'}.`, error ? 'error' : 'ok');
-      await loadMembers();
-      return;
-    }
-    const m = e.target.closest('[data-membership]');
-    if (m) {
-      const makeCurrent = m.dataset.current !== 'true';
-      const { error } = await client.from('accounts')
-        .update({ membership_current: makeCurrent }).eq('email', m.dataset.membership);
-      showMessage($('membersMsg'), error ? error.message
-        : `${m.dataset.membership} marked ${makeCurrent ? 'current' : 'lapsed'}.`, error ? 'error' : 'ok');
-      await loadMembers();
-      return;
-    }
-    const b = e.target.closest('button[data-invite]');
-    if (!b) return;
-    b.disabled = true;
-    showMessage($('membersMsg'), '');
-    const err = await sendInvite(b.dataset.invite);
-    if (err) { showMessage($('membersMsg'), err); b.disabled = false; return; }
-    showMessage($('membersMsg'), `Invite sent to ${b.dataset.invite}. The link works for 24 hours.`, 'ok');
-    await loadMembers();
-  });
-
-  // One at a time, so a problem with one email doesn't stop the rest and the
-  // email service isn't flooded.
-  $('inviteAllBtn').addEventListener('click', async () => {
-    const emails = [...notInvited];
-    if (!emails.length) return;
-    if (!confirm(`Send setup-invite emails to ${emails.length} current member(s) who haven't been invited yet?`)) return;
-    $('inviteAllBtn').disabled = true;
-    const failed = [];
-    for (let i = 0; i < emails.length; i++) {
-      showMessage($('membersMsg'), `Sending invite ${i + 1} of ${emails.length}…`, 'ok');
-      const err = await sendInvite(emails[i]);
-      if (err) failed.push(`${emails[i]}: ${err}`);
-    }
-    const sent = emails.length - failed.length;
-    showMessage($('membersMsg'),
-      `Sent ${sent} invite(s).` + (failed.length ? ` ${failed.length} failed: ${failed.join('; ')}` : ''),
-      failed.length ? 'error' : 'ok');
-    await loadMembers();
   });
 
   start().catch(err => showMessage($('guardMsg'), err.message));

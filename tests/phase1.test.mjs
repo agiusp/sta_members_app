@@ -16,7 +16,7 @@ await check('first developer is invited with the bootstrap script and sets a pas
 const members = {};
 await check('developer invites members through the invite function', async () => {
   for (const email of ['alice.johnson@example.com', 'bob.smith@example.com', 'carol.lee@example.com',
-                       'david.kim@example.com', 'yara.green@example.com']) {
+                       'david.kim@example.com', 'yara.green@example.com', 'zack.baker@example.com']) {
     const r = await inviteAsDeveloper(dev, email);
     assert.equal(r.status, 200, JSON.stringify(r.data));
     members[email.split('.')[0]] = await acceptInvite(email, PW);
@@ -25,10 +25,10 @@ await check('developer invites members through the invite function', async () =>
 
 await check('an invite that was not accepted can be resent, and the new link works', async () => {
   assert.equal((await inviteAsDeveloper(dev, 'emma.brown@example.com')).status, 200);
-  const statuses = Object.fromEntries((await rpcOk(dev, 'dev_members')).map(m => [m.email, m.signin_status]));
+  const statuses = Object.fromEntries((await rpcOk(dev, 'dev_members')).map(m => [m.email, m.app_access]));
   assert.equal(statuses['emma.brown@example.com'], 'invited');
-  assert.equal(statuses['alice.johnson@example.com'], 'active');
-  assert.equal(statuses['frank.davis@example.com'], 'not_invited');
+  assert.equal(statuses['alice.johnson@example.com'], 'yes');
+  assert.equal(statuses['frank.davis@example.com'], 'pending');
   await new Promise(r => setTimeout(r, 1100)); // resends are rate-limited to one per second
   const again = await inviteAsDeveloper(dev, 'emma.brown@example.com');
   assert.equal(again.status, 200, JSON.stringify(again.data));
@@ -79,7 +79,7 @@ await check('before Monday 9:00, sign-ups are not open yet', async () => {
 
 console.log('Sign-ups, capacity and waitlist');
 await rpcOk(dev, 'dev_set_num_courts', { p_session_id: s.id, p_num_courts: 1 });
-const order = [['alice', 'Alice'], ['bob', 'Bob'], ['carol', 'Carol'], ['david', 'David'], ['yara', 'Yara'], ['yara', 'Zack']];
+const order = [['alice', 'Alice'], ['bob', 'Bob'], ['carol', 'Carol'], ['david', 'David'], ['yara', 'Yara'], ['zack', 'Zack']];
 await check('with 1 court, the first 4 sign-ups get spots and the rest are waitlisted in order', async () => {
   for (let i = 0; i < order.length; i++) {
     await rpcOk(dev, 'dev_set_test_clock', { p_clock: at(s.signups_open_at, (i + 1) * minute) });
@@ -89,12 +89,12 @@ await check('with 1 court, the first 4 sign-ups get spots and the rest are waitl
   const lineup = (await rpcOk(dev, 'dev_week')).lineup;
   assert.deepEqual(lineup.map(l => l.name.split(' ')[0]), ['Alice', 'Bob', 'Carol', 'David', 'Yara', 'Zack']);
   assert.deepEqual(lineup.map(l => l.has_spot), [true, true, true, true, false, false]);
-  const yara = await rpcOk(members.yara, 'my_week');
-  assert.deepEqual(yara.players.map(p => [p.first_name, p.waitlist_place]), [['Yara', 1], ['Zack', 2]]);
+  assert.equal((await playerOf(members.yara, 'Yara')).waitlist_place, 1);
+  assert.equal((await playerOf(members.zack, 'Zack')).waitlist_place, 2);
 });
 
-await check('a member can sign up a linked family member but not anyone else', async () => {
-  const zack = await playerOf(members.yara, 'Zack');
+await check('a member cannot sign up anyone else', async () => {
+  const zack = await playerOf(members.zack, 'Zack');
   await rpcFails(members.alice, 'sign_up', { p_player_id: zack.id }, /not linked/);
 });
 
@@ -106,12 +106,12 @@ await check('when someone cancels, the first person on the waitlist moves up', a
   await rpcOk(members.bob, 'cancel_signup', { p_player_id: (await playerOf(members.bob, 'Bob')).id });
   const yara = await playerOf(members.yara, 'Yara');
   assert.equal(yara.has_spot, true);
-  assert.equal((await playerOf(members.yara, 'Zack')).waitlist_place, 1);
+  assert.equal((await playerOf(members.zack, 'Zack')).waitlist_place, 1);
 });
 
 await check('adding a court gives waitlisted players spots', async () => {
   await rpcOk(dev, 'dev_set_num_courts', { p_session_id: s.id, p_num_courts: 2 });
-  assert.equal((await playerOf(members.yara, 'Zack')).has_spot, true);
+  assert.equal((await playerOf(members.zack, 'Zack')).has_spot, true);
 });
 
 console.log('Saturday noon cutoff');
@@ -148,7 +148,7 @@ await check('a member sees only their own account, players and sign-ups', async 
   const accts = await call('/rest/v1/accounts?select=email', { token: members.yara, method: 'GET' });
   assert.deepEqual(accts.data.map(a => a.email), ['yara.green@example.com']);
   const players = await call('/rest/v1/players?select=first_name', { token: members.yara, method: 'GET' });
-  assert.deepEqual(players.data.map(p => p.first_name).sort(), ['Yara', 'Zack']);
+  assert.deepEqual(players.data.map(p => p.first_name), ['Yara']);
   const signups = await call('/rest/v1/signups?select=player_id', { token: members.alice, method: 'GET' });
   assert.equal(signups.data.length, 1);
 });
@@ -207,21 +207,24 @@ await check('not even a developer can switch test mode on from the app', async (
   assert.equal((await rpcOk(dev, 'dev_week')).settings.test_mode, true);
 });
 
-console.log('Lapsed memberships');
-await check('a lapsed member can still sign in but gets the dues message instead of signing up', async () => {
+console.log('Inactive memberships');
+let carolPlayer;
+await check('an Inactive member can still sign in but gets only the dues message', async () => {
   await rpcOk(dev, 'dev_set_test_clock', { p_clock: at(s.signups_open_at, 90 * minute) });
+  carolPlayer = (await playerOf(members.carol, 'Carol')).id;
   const r = await call('/rest/v1/accounts?email=eq.carol.lee@example.com',
     { token: dev, method: 'PATCH', body: { membership_current: false } });
   assert.ok(r.status < 300, JSON.stringify(r.data));
-  const w = await rpcOk(members.carol, 'my_week');
-  assert.equal(w.membership_current, false);
-  assert.match(w.dues_message, /membership dues/);
-  await rpcFails(members.carol, 'sign_up', { p_player_id: w.players[0].id }, /membership dues/);
+  const access = await rpcOk(members.carol, 'my_access');
+  assert.equal(access.member, false);
+  assert.match(access.dues_message, /membership dues/);
+  await rpcFails(members.carol, 'my_week', {}, /Not a member/);
+  await rpcFails(members.carol, 'sign_up', { p_player_id: carolPlayer }, /Not a member/);
 });
 
-await check('lapsed members are listed as lapsed, cannot be invited, and are skipped by simulated sign-ups', async () => {
+await check('Inactive members are listed as Inactive, cannot be invited, and are skipped by simulated sign-ups', async () => {
   const carol = (await rpcOk(dev, 'dev_members')).find(m => m.email === 'carol.lee@example.com');
-  assert.equal(carol.membership_current, false);
+  assert.equal(carol.membership, 'inactive');
   await call('/rest/v1/accounts?email=eq.frank.davis@example.com',
     { token: dev, method: 'PATCH', body: { membership_current: false } });
   assert.equal((await inviteAsDeveloper(dev, 'frank.davis@example.com')).status, 400);
@@ -231,14 +234,13 @@ await check('lapsed members are listed as lapsed, cannot be invited, and are ski
   await rpcOk(dev, 'dev_clear_signups');
 });
 
-await check('a member cannot mark themselves current, but a developer can', async () => {
+await check('a member cannot make themselves Active, but a developer can', async () => {
   await call('/rest/v1/accounts?email=eq.carol.lee@example.com',
     { token: members.carol, method: 'PATCH', body: { membership_current: true } });
-  assert.equal((await rpcOk(members.carol, 'my_week')).membership_current, false);
+  assert.equal((await rpcOk(members.carol, 'my_access')).member, false);
   await call('/rest/v1/accounts?email=eq.carol.lee@example.com',
     { token: dev, method: 'PATCH', body: { membership_current: true } });
-  const w = await rpcOk(members.carol, 'my_week');
-  await rpcOk(members.carol, 'sign_up', { p_player_id: w.players[0].id });
+  await rpcOk(members.carol, 'sign_up', { p_player_id: carolPlayer });
 });
 
 await check('a developer can change the dues message; members cannot', async () => {

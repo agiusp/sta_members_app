@@ -79,7 +79,7 @@ window.STA = (function () {
   const DEFAULT_LOGO = 'img/sta-logo.png';
   const SECTIONS = [
     { key: 'news', label: 'News', href: 'news.html' },
-    { key: 'sunday', label: 'Sunday Doubles', href: 'signup.html', tabs: [
+    { key: 'sunday', label: 'Sunday Doubles', href: 'signup.html', sundayOnly: true, tabs: [
       { key: 'signup', label: 'Sign-up', href: 'signup.html' },
       { key: 'courts', label: 'Court Assignments', href: 'courts.html' },
       { key: 'review', label: 'Game Review', href: 'review.html' }] },
@@ -90,10 +90,12 @@ window.STA = (function () {
       { key: 'emails', label: 'Emails, schedule and settings', href: 'emails.html' }] }
   ];
   const BRAND_CACHE = 'sta-branding';
-  const DEV_CACHE = 'sta-is-developer';
+  const ACCESS_CACHE = 'sta-access';
   let brand = null;
   let who = null;        // signed-in email, or null
   let isDev = false;
+  let isSunday = false;   // approved for Sunday Doubles
+  let isMember = true;    // Active member (Inactive members see only the dues message)
 
   // "STA - STA Members App" shows as "STA" with "STA Members App" under it.
   function splitName(name) {
@@ -120,9 +122,9 @@ window.STA = (function () {
       header.className = 'site-header';
       document.body.insertBefore(header, document.body.firstChild);
     }
-    let links = who ? SECTIONS.filter(s => !s.devOnly || isDev).map(s =>
+    let links = who && isMember ? SECTIONS.filter(s => (!s.devOnly || isDev) && (!s.sundayOnly || isSunday)).map(s =>
       `<a href="${s.href}"${s.key === section ? ' class="active" aria-current="page"' : ''}>${esc(s.label)}</a>`).join('') : '';
-    if (who && b.demo) links += `<a href="demo-inbox.html"${section === 'demo' ? ' class="active" aria-current="page"' : ''}>Demo inbox</a>`;
+    if (who && isMember && b.demo) links += `<a href="demo-inbox.html"${section === 'demo' ? ' class="active" aria-current="page"' : ''}>Demo inbox</a>`;
     const demoStrip = b.demo
       ? '<div class="demo-strip"><div class="site-inner">Demo version: all players and club data are made up. Emails are not sent; they appear in the Demo inbox.</div></div>' : '';
     const website = b.website_url
@@ -175,7 +177,7 @@ window.STA = (function () {
   }
 
   async function signOut() {
-    try { sessionStorage.removeItem(DEV_CACHE); } catch (_) { /* storage blocked */ }
+    try { sessionStorage.removeItem(ACCESS_CACHE); } catch (_) { /* storage blocked */ }
     await client.auth.signOut();
     location.href = './';
   }
@@ -198,19 +200,37 @@ window.STA = (function () {
     who = session.user.email;
     // The Developers tab is only a shortcut: the database itself decides who
     // can do what. Remembered for this browser tab so it doesn't flicker.
-    try { isDev = sessionStorage.getItem(DEV_CACHE) === session.user.id; } catch (_) { /* storage blocked */ }
+    try {
+      const c = JSON.parse(sessionStorage.getItem(ACCESS_CACHE) || 'null');
+      if (c && c.user === session.user.id) ({ developer: isDev, sunday_doubles: isSunday, member: isMember } = c);
+    } catch (_) { /* storage blocked */ }
     renderHeader();
-    const devCheck = client.rpc('my_developer').then(({ data }) => {
-      isDev = !!(data && data.developer);
-      try { isDev ? sessionStorage.setItem(DEV_CACHE, session.user.id) : sessionStorage.removeItem(DEV_CACHE); } catch (_) { /* storage blocked */ }
-      renderHeader();
-      return data || {};
-    });
+    const { data: access } = await client.rpc('my_access');
+    const me = access || {};
+    isMember = me.member === true;
+    isDev = isMember && me.developer === true;
+    isSunday = isMember && me.sunday_doubles === true;
+    try { sessionStorage.setItem(ACCESS_CACHE, JSON.stringify({ user: session.user.id, developer: isDev, sunday_doubles: isSunday, member: isMember })); }
+    catch (_) { /* storage blocked */ }
+    renderHeader();
+    const section = document.body.dataset.section;
+    // Inactive members: only the dues message.
+    if (!isMember) {
+      blockPage('Membership needed', me.dues_message ||
+        'Our records show that your STA membership has not been renewed. Please pay your membership dues to use the app.');
+      await branding;
+      return null;
+    }
+    if (section === 'sunday' && !isSunday) {
+      blockPage('Sunday Doubles', 'Sunday Doubles is for advanced players approved by the Sunday Doubles program manager. ' +
+        'If you would like to join, please contact the program manager.');
+      await branding;
+      return null;
+    }
     // Developer pages need a sign-in confirmed with a code from an
     // authenticator app (two-step sign-in); ask for it first.
-    if (document.body.dataset.section === 'dev') {
-      const me = await devCheck;
-      if (me.developer && !me.confirmed) {
+    if (section === 'dev') {
+      if (isDev && !me.confirmed) {
         const here = location.pathname.split('/').pop();
         location.replace('two-step.html?next=' + encodeURIComponent(here + location.search));
         return null;
@@ -218,6 +238,14 @@ window.STA = (function () {
     }
     await branding;
     return session;
+  }
+
+  // Replaces the page content with a message (no access to this page).
+  function blockPage(title, message) {
+    const main = document.querySelector('main.page');
+    if (!main) return;
+    main.innerHTML = `<div class="section-head"><h1>${esc(title)}</h1></div>
+      <section class="panel"><p style="margin:0">${esc(message)}</p></section>`;
   }
 
   // Shows the amber test-mode banner when the app is on the test clock.

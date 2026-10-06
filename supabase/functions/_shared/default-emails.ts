@@ -34,7 +34,7 @@ export const DEFAULT_EMAILS: EmailTemplate[] = [
     subject: "Your invitation to {{program_name}}",
     body: `Hello {{player_names}},
 
-You're invited to {{program_name}}, the club's members app, for club news and for signing up for the Sunday doubles matches. To start using it, click the link below and choose a password:
+You're invited to {{program_name}}, the club's members app: club news, Casual Play (find players who are free when you are), and, for approved players, Sunday Doubles. To start using it, click the link below and choose a password:
 
 {{link}}
 
@@ -45,12 +45,12 @@ Once your password is set, you can sign up for Sunday Doubles each week from Mon
 What the app stores: your name, email address, play level, sex, which Sundays you played, and any Casual Play times you post. Only the program organizers can see your email address. Other players see names on the court assignments. On the Casual Play calendar, they see the sex and play level of anyone who posts a time, and the name only if that player chooses to show it. When Casual Play times line up, players who show their name for those times get each other's names and email addresses. To be removed, contact {{contacts}}.
 `,
     placeholders: {
-      player_names: "the names of the player(s) linked to this email",
+      player_names: "the member's name",
       link: "the personal link to set a password (required)",
       contacts: CONTACTS,
     },
     sample: {
-      player_names: "Yara Green and Zack Baker",
+      player_names: "Yara Green",
       link: "https://<app address>/auth/v1/verify?token=...&type=invite",
       contacts: SAMPLE_CONTACTS,
     },

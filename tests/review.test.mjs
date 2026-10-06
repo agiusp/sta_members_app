@@ -17,7 +17,7 @@ const setClock = iso => rpcOk(dev, 'dev_set_test_clock', { p_clock: iso });
 await setClock(null);
 const s = (await rpcOk(dev, 'dev_week')).session;
 const m = {};
-for (const email of ['alice.johnson@example.com', 'yara.green@example.com', 'carol.lee@example.com']) {
+for (const email of ['alice.johnson@example.com', 'yara.green@example.com', 'zack.baker@example.com', 'carol.lee@example.com']) {
   assert.equal((await inviteAsDeveloper(dev, email)).status, 200);
   m[email.split('.')[0]] = await acceptInvite(email, PW);
 }
@@ -28,7 +28,7 @@ await setClock(at(s.signups_open_at, hour));
 await rpcOk(dev, 'dev_set_num_courts', { p_session_id: s.id, p_num_courts: 2 });
 await rpcOk(m.alice, 'sign_up', { p_player_id: await mine(m.alice, 'Alice') });
 await rpcOk(m.yara, 'sign_up', { p_player_id: await mine(m.yara, 'Yara') });
-await rpcOk(m.yara, 'sign_up', { p_player_id: await mine(m.yara, 'Zack') });
+await rpcOk(m.zack, 'sign_up', { p_player_id: await mine(m.zack, 'Zack') });
 await call('/rest/v1/accounts?email=eq.carol.lee@example.com', { token: dev, method: 'PATCH', body: { membership_current: false } });
 await setClock(at(s.signups_open_at, 2 * hour));
 await rpcOk(dev, 'dev_simulate_signups', { p_count: 3 });
@@ -134,12 +134,12 @@ await check('singles: the player is automatically player set 1 and the opponent 
   assert.deepEqual(yara.review.sets[0].team2, ['Zack Baker']);
 });
 
-await check('a family account reviews separately for each linked player who played', async () => {
-  const r = await rpcOk(m.yara, 'submit_review', { p_enjoyment: 4, p_player_id: id('Zack'), p_sets: [{ partner_id: null, my_games: 4, their_games: 6 }] });
+await check('each player reviews separately', async () => {
+  const r = await rpcOk(m.zack, 'submit_review', { p_enjoyment: 4, p_player_id: id('Zack'), p_sets: [{ partner_id: null, my_games: 4, their_games: 6 }] });
   const zack = r.players.find(p => p.name === 'Zack Baker');
   assert.deepEqual(zack.review.sets[0].team1, ['Zack Baker']);
   assert.deepEqual(zack.review.sets[0].team2, ['Yara Green']);
-  assert.ok(r.players.find(p => p.name === 'Yara Green').review, 'Yara keeps her own review');
+  assert.ok((await rpcOk(m.yara, 'my_review')).players.find(p => p.name === 'Yara Green').review, 'Yara keeps her own review');
 });
 
 console.log('Privacy');

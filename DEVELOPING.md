@@ -81,6 +81,15 @@ The look follows the club website (statennis.com): Playfair Display headings, sm
 
 Developers set the **app name**, **brand color**, **logo** and **club website** at the top of **Emails, schedule and settings**. They're stored in the `settings` table and shown on every page (including the sign-in page, through the public `branding()` function), in tab titles, as `{{program_name}}` in emails, and as the email sender name. A name like "STA - STA Members App" shows as "STA" with "STA Members App" under it. Without an uploaded logo, the club logo in `app/img/sta-logo.png` is used. The uploaded logo is shrunk in the browser and stored as a small PNG/JPEG/WebP data URL, so no file storage service is needed.
 
+## Members and access
+
+Developers keep the **Members Table** (Developers > Members and this week): one row per person, each with their own email address (`players.account_email` is unique). Columns: Name, Email, **Membership** (Active/Inactive, `accounts.membership_current`), **Sunday Doubles** (Yes/No, `players.sunday_doubles`), **App Access** (filled in by the app: Yes once the member accepted the invitation, otherwise "Pending STA Member App Invitation" or "Invited"), plus level, sex and Developer. Changes go through `dev_save_member`; the table comes from `dev_members`.
+
+- **Inactive** members can sign in but see only the dues message (`my_email()` is null for them, so every member function refuses them). Marking them Active restores access. Inactive members can't be invited, and developers must be Active.
+- **Sunday Doubles** (sign-up, courts, game review, the Monday play-invite) is only for Active members with Sunday Doubles = Yes (`my_sd_email()`). Everyone Active gets News and Casual Play.
+- **New members** start as "Pending STA Member App Invitation" until a developer clicks Send Invite. Their email can be changed until they've joined.
+- Pages ask `my_access()` what to show: the menu hides Sunday Doubles from members not approved for it, and Inactive members see only the dues message.
+
 ## Demo
 
 A demo copy uses made-up players only (`scripts/demo-seed.mjs`, which refuses to run on a database with any address not ending in @example.com). It turns on demo mode (`settings.demo`): emails are kept in the **Demo inbox** page instead of being sent, and every page says it's a demo. It also turns on test mode with the clock on the Thursday before the next Sunday, and switches off two-step sign-in for the demo developer. Demo sign-ins are alice.johnson@example.com (member) and dev@example.com (developer), with the password in `DEMO_PASSWORD`, which is kept out of the repo.

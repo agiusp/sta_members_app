@@ -7,7 +7,7 @@ import { assert, call, rpcOk, rpcFails, check, acceptInvite, inviteAsDeveloper,
 await clearInbox();
 const dev = await bootstrapDeveloper();
 const members = {};
-for (const email of ['alice.johnson@example.com', 'yara.green@example.com']) {
+for (const email of ['alice.johnson@example.com', 'yara.green@example.com', 'zack.baker@example.com']) {
   assert.equal((await inviteAsDeveloper(dev, email)).status, 200);
   members[email.split('.')[0]] = await acceptInvite(email, PW);
 }
@@ -33,7 +33,7 @@ await rpcOk(dev, 'dev_set_num_courts', { p_session_id: s.id, p_num_courts: 2 });
 const mine = async (token, first) => (await rpcOk(token, 'my_week')).players.find(p => p.first_name === first).id;
 await rpcOk(members.alice, 'sign_up', { p_player_id: await mine(members.alice, 'Alice') });
 await rpcOk(members.yara, 'sign_up', { p_player_id: await mine(members.yara, 'Yara') });
-await rpcOk(members.yara, 'sign_up', { p_player_id: await mine(members.yara, 'Zack') });
+await rpcOk(members.zack, 'sign_up', { p_player_id: await mine(members.zack, 'Zack') });
 await setClock(at(s.signups_open_at, 3 * hour));
 await rpcOk(dev, 'dev_simulate_signups', { p_count: 10 });
 const lineup = (await rpcOk(dev, 'dev_scheduler_data')).lineup;
@@ -159,7 +159,7 @@ await check('the court email lists every court, marks ball-bringers and shows th
 });
 
 await check('no-spot emails are addressed to the player, with their waitlist place if they had one', async () => {
-  const zack = published.find(m => /no court spot/.test(m.subject) && m.to === 'yara.green@example.com');
+  const zack = published.find(m => /no court spot/.test(m.subject) && m.to === 'zack.baker@example.com');
   const zackText = await text(zack.id);
   assert.match(zackText, /^Hello Zack,/);
   assert.doesNotMatch(zackText, /on the waitlist/, 'Zack had a spot, so no waitlist place');
@@ -325,7 +325,7 @@ await check('there must always be at least one developer', async () => {
   await call('/rest/v1/accounts?email=eq.bob.smith@example.com', { token: dev, method: 'PATCH', body: { is_developer: false } });
   const r = await call('/rest/v1/accounts?email=eq.dev@example.com', { token: dev, method: 'PATCH', body: { is_developer: false } });
   assert.ok(r.status >= 400, JSON.stringify(r.data));
-  assert.match(r.data.message, /at least one developer/);
+  assert.match(r.data.message, /at least one Active developer/);
   assert.equal(await rpcOk(dev, 'is_developer'), true);
 });
 

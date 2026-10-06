@@ -19,7 +19,7 @@ const TUE = '2026-11-10';
 
 const m = {};
 for (const [key, email] of [['alice', 'alice.johnson@example.com'], ['bob', 'bob.smith@example.com'],
-                            ['carol', 'carol.lee@example.com'], ['yara', 'yara.green@example.com'],
+                            ['carol', 'carol.lee@example.com'], ['yara', 'yara.green@example.com'], ['zack', 'zack.baker@example.com'],
                             ['henry', 'henry.moore@example.com']]) {
   assert.equal((await inviteAsDeveloper(dev, email)).status, 200);
   m[key] = await acceptInvite(email, PW);
@@ -28,7 +28,7 @@ const cal = token => rpcOk(token, 'casual_calendar');
 const player = async (token, first) => (await cal(token)).players.find(p => p.first_name === first).id;
 const id = {
   alice: await player(m.alice, 'Alice'), bob: await player(m.bob, 'Bob'), carol: await player(m.carol, 'Carol'),
-  yara: await player(m.yara, 'Yara'), zack: await player(m.yara, 'Zack'), henry: await player(m.henry, 'Henry'),
+  yara: await player(m.yara, 'Yara'), zack: await player(m.zack, 'Zack'), henry: await player(m.henry, 'Henry'),
   dana: await player(dev, 'Dana')
 };
 const submit = (token, playerId, date, start, minutes, type, show) =>
@@ -81,12 +81,11 @@ await check('a player cannot overlap their own times, or post for someone else\'
   const r = await submit(m.alice, id.alice, TUE, '10:00', 60);
   assert.match(r.data.message, /already available/);
   assert.match((await submit(m.alice, id.bob, TUE, '12:00', 60)).data.message, /not linked to your account/);
-  assert.equal((await submit(m.yara, id.zack, TUE, '09:00', 60)).status, 200, 'family members can be posted for');
 });
 
-await check('members whose membership lapsed cannot post', async () => {
+await check('Inactive members cannot post', async () => {
   await call('/rest/v1/accounts?email=eq.carol.lee@example.com', { token: dev, method: 'PATCH', body: { membership_current: false } });
-  assert.match((await submit(m.carol, id.carol, TUE, '12:00', 60)).data.message, /membership/);
+  assert.match((await submit(m.carol, id.carol, TUE, '12:00', 60)).data.message, /Not a member/);
   await call('/rest/v1/accounts?email=eq.carol.lee@example.com', { token: dev, method: 'PATCH', body: { membership_current: true } });
 });
 
@@ -130,7 +129,7 @@ await check('a member unsubmits their own time, but not someone else\'s', async 
 
 console.log('Game emails');
 // Clear the times posted so far, then set everyone's settings.
-for (const token of [m.alice, m.bob, m.carol, m.yara, m.henry, dev]) {
+for (const token of [m.alice, m.bob, m.carol, m.yara, m.zack, m.henry, dev]) {
   for (const s of (await cal(token)).slots.filter(x => x.mine)) await rpcOk(token, 'casual_unsubmit', { p_slot_id: s.id });
 }
 const prefs = (token, show, notify, levels) => rpcOk(token, 'casual_save_prefs', { p_show_name: show, p_notify: notify, p_levels: levels });
@@ -234,7 +233,7 @@ await check('shown players are told how many hidden players also line up; the hi
   assert.match(henrys, /Bob Smith \(M, 3\.5\): free/);
 });
 
-await check('no email unless levels suit both ways, both opted in, the game fits, an hour is shared, and on different accounts', async () => {
+await check('no email unless levels suit both ways, both opted in, the game fits, and an hour is shared', async () => {
   await clearInbox();
   ok(await submit(m.alice, id.alice, SAT, '09:00', 60, 'singles'));     // 3.5; wants 3.5
   ok(await submit(m.carol, id.carol, SAT, '09:00', 60, 'singles'));     // 4.0: Alice didn't choose 4.0
@@ -242,8 +241,6 @@ await check('no email unless levels suit both ways, both opted in, the game fits
   ok(await submit(dev, id.dana, SAT, '09:00', 60, 'singles'));          // 3.5, but not opted in
   ok(await submit(m.bob, id.bob, SAT, '09:00', 60, 'doubles'));         // 3.5, but only wants doubles
   ok(await submit(m.henry, id.henry, SAT, '09:30', 60, 'singles'));     // 3.5, singles, but only 30 minutes shared
-  ok(await submit(m.yara, id.yara, SAT, '15:00', 60, 'either'));        // Yara and Zack share an account
-  ok(await submit(m.yara, id.zack, SAT, '15:00', 60, 'either'));
   await runTasks();
   assert.deepEqual(await mail(/^Casual Play/), []);
   await prefs(m.carol, false, true, ['4.0']);

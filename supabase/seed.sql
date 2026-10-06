@@ -32,9 +32,9 @@ insert into public.accounts (email, is_developer) values
   ('victor.king@example.com', false),
   ('wendy.wright@example.com', false),
   ('xavier.scott@example.com', false),
-  ('yara.green@example.com', false);
+  ('yara.green@example.com', false),
+  ('zack.baker@example.com', false);
 
--- Zack Baker shares Yara Green's account, to test linked family members.
 insert into public.players (account_email, first_name, last_name, level, sex) values
   ('dev@example.com', 'Dana', 'Developer', '3.5', 'F'),
   ('alice.johnson@example.com', 'Alice', 'Johnson', '3.5', 'F'),
@@ -62,7 +62,7 @@ insert into public.players (account_email, first_name, last_name, level, sex) va
   ('wendy.wright@example.com', 'Wendy', 'Wright', '4.5', 'F'),
   ('xavier.scott@example.com', 'Xavier', 'Scott', '4.5', 'M'),
   ('yara.green@example.com', 'Yara', 'Green', '4.0', 'F'),
-  ('yara.green@example.com', 'Zack', 'Baker', '4.0', 'M');
+  ('zack.baker@example.com', 'Zack', 'Baker', '4.0', 'M');
 
 -- More fictitious players, so the waitlist can be tested with 7 courts (28 spots).
 insert into public.accounts (email) values
@@ -159,3 +159,6 @@ select s.id, h.court, p.id, h.balls
   ) h (play_date, name, court, balls)
   join public.sessions s on s.play_date = h.play_date
   join public.players p on p.first_name || ' ' || p.last_name = h.name;
+
+-- Everyone above plays Sunday Doubles (tests switch individual players off).
+update public.players set sunday_doubles = true;

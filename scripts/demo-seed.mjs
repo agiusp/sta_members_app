@@ -88,7 +88,13 @@ if (missing.length) {
   await insert('players', missing.map(p => ({ account_email: p.email, first_name: p.first, last_name: p.last,
                                                level: p.level, sex: p.sex })), 'return=minimal');
 }
-const players = await table('players', '?select=id,account_email,first_name,last_name,level,sex&order=id');
+// Most members play Sunday Doubles; a few only use News and Casual Play, and
+// two haven't renewed their membership (Inactive).
+const casualOnly = ['Beth', 'Chloe', 'Dina', 'Elena', 'Fiona'];
+await patch('players', 'id=gt.0', { sunday_doubles: true });
+await patch('players', `first_name=in.(${casualOnly.join(',')})`, { sunday_doubles: false });
+await patch('accounts', 'email=in.(victor.king@example.com,uma.young@example.com)', { membership_current: false });
+const players = await table('players', '?select=id,account_email,first_name,last_name,level,sex,sunday_doubles&order=id');
 const byName = n => players.find(p => `${p.first_name} ${p.last_name}` === n);
 const who = n => byName(n).id;
 
@@ -97,7 +103,9 @@ if (!(await table('seasons', '?select=id')).length) {
   await insert('seasons', { name: String(new Date().getFullYear()), start_date: `${new Date().getFullYear()}-05-03` }, 'return=minimal');
 }
 const season = (await table('seasons', '?select=id&order=start_date.desc&limit=1'))[0].id;
-const regulars = players.filter(p => p.account_email !== 'dev@example.com');
+const inactive = ['victor.king@example.com', 'uma.young@example.com'];
+const regulars = players.filter(p => p.account_email !== 'dev@example.com' && p.sunday_doubles);
+const current = regulars.filter(p => !inactive.includes(p.account_email));
 for (const [w, back] of [[0, 21], [1, 14], [2, 7]]) {
   const date = addDays(SUNDAY, -back);
   if ((await table('sessions', `?select=id&play_date=eq.${date}`)).length) continue;
@@ -147,7 +155,7 @@ await patch('sessions', `id=eq.${session.id}`, { num_courts: 5, play_invite_sent
 if (!(await table('signups', `?select=id&session_id=eq.${session.id}`)).length) {
   // 18 sign-ups for 20 spots on 5 courts. Alice hasn't signed up yet, so
   // whoever tries the demo as Alice can.
-  const signers = regulars.filter(p => p.first_name !== 'Alice').slice(0, 18);
+  const signers = current.filter(p => p.first_name !== 'Alice').slice(0, 18);
   await insert('signups', signers.map((p, i) => ({
     session_id: session.id, player_id: p.id, signed_up_by: p.account_email,
     signed_up_at: new Date(Date.parse(et(addDays(SUNDAY, -6), '09:00')) + (i * i * 7 + 1) * 60000).toISOString(),

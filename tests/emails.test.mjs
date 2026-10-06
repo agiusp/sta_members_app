@@ -27,7 +27,7 @@ await check('the setup-invite uses the app wording, names the linked players, an
   const [mail] = await inbox();
   assert.equal(mail.subject, 'Your invitation to STA - STA Members App');
   const body = await text(mail.id);
-  assert.match(body, /^Hello Yara Green and Zack Baker,/);
+  assert.match(body, /^Hello Yara Green,/);
   assert.match(body, /expires after 24 hours/);
   assert.match(body, /What the app stores/);
   members.yara = await acceptInvite('yara.green@example.com', PW);
@@ -93,16 +93,20 @@ await check('when a player cancels, whoever moves off the waitlist gets the "goo
   await rpcOk(dev, 'dev_set_num_courts', { p_session_id: s.id, p_num_courts: 1 });
   await rpcOk(members.alice, 'sign_up', { p_player_id: await mine(members.alice, 'Alice') });
   await setClock(at(s.signups_open_at, 2 * hour));
+  if (!members.zack) {
+    assert.equal((await inviteAsDeveloper(dev, 'zack.baker@example.com')).status, 200);
+    members.zack = await acceptInvite('zack.baker@example.com', PW);
+  }
   // Fill the court with 3 random players, but not Yara or Zack (simulated
-  // sign-ups skip lapsed members, so Yara's account is lapsed meanwhile).
-  const setYaraCurrent = v => call('/rest/v1/accounts?email=eq.yara.green@example.com',
+  // sign-ups skip Inactive members, so they're Inactive meanwhile).
+  const setCurrent = v => call('/rest/v1/accounts?email=in.(yara.green@example.com,zack.baker@example.com)',
     { token: dev, method: 'PATCH', body: { membership_current: v } });
-  await setYaraCurrent(false);
+  await setCurrent(false);
   await rpcOk(dev, 'dev_simulate_signups', { p_count: 3 });   // courts full
-  await setYaraCurrent(true);
+  await setCurrent(true);
   await setClock(at(s.signups_open_at, 3 * hour));
   await rpcOk(members.yara, 'sign_up', { p_player_id: await mine(members.yara, 'Yara') }); // waitlist #1
-  await rpcOk(members.yara, 'sign_up', { p_player_id: await mine(members.yara, 'Zack') }); // waitlist #2
+  await rpcOk(members.zack, 'sign_up', { p_player_id: await mine(members.zack, 'Zack') }); // waitlist #2
   await rpcOk(members.alice, 'cancel_signup', { p_player_id: await mine(members.alice, 'Alice') });
   assert.deepEqual((await runTasks()).data.tasks, ['moved_off_waitlist']);
   const [mail] = await inbox();
