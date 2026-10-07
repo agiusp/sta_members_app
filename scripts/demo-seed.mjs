@@ -195,27 +195,29 @@ if (!(await table('news', '?select=id')).length) {
 
 // ---------- Casual Play ----------
 const casual = [
-  // [name, show name, emails, levels, [day offset from Thursday, start, minutes, type, show for this time]]
-  ['Alice Johnson', true, true, ['3.5'], [[2, '09:00', 120, 'either'], [5, '18:00', 90, 'singles']]],
-  ['Bob Smith', true, true, ['3.5', '4.0'], [[2, '09:00', 90, 'either']]],
-  ['Grace Wilson', false, true, ['3.5'], [[2, '08:30', 120, 'doubles']]],
-  ['Henry Moore', true, true, ['3.5'], [[2, '10:00', 60, 'singles'], [6, '07:00', 90, 'either']]],
-  ['Mia Garcia', true, true, ['3.5'], [[1, '17:00', 120, 'doubles'], [5, '18:00', 120, 'either']]],
-  ['Carol Lee', true, true, ['4.0'], [[1, '07:00', 60, 'singles'], [8, '12:00', 90, 'either']]],
-  ['David Kim', false, true, ['4.0', '4.5'], [[1, '07:00', 90, 'either']]],
-  ['Olivia Clark', true, true, ['4.5'], [[3, '15:00', 120, 'doubles']]],
-  ['Paul Rodriguez', true, false, ['4.5'], [[3, '15:30', 90, 'doubles']]],
-  ['Emma Brown', true, true, ['3.0'], [[4, '11:00', 60, 'either'], [10, '09:30', 60, 'either']]],
-  ['Frank Davis', true, true, ['3.0'], [[4, '10:30', 120, 'singles']]],
-  ['Noah Robinson', false, true, ['3.5'], [[6, '07:00', 120, 'either'], [12, '18:30', 90, 'doubles']]],
+  // [name, show name, emails, levels, share contact info, [day offset from Thursday, start, minutes, share for this time]]
+  // Saturday 9-10am: Alice, Bob, Grace and Henry make a possible doubles game
+  // (Alice, Bob and Henry share their contact info; Grace doesn't).
+  ['Alice Johnson', true, true, ['3.5'], true, [[2, '09:00', 120], [5, '18:00', 90]]],
+  ['Bob Smith', true, true, ['3.5', '4.0'], true, [[2, '09:00', 90]]],
+  ['Grace Wilson', false, true, ['3.5'], false, [[2, '08:30', 120]]],
+  ['Henry Moore', true, true, ['3.5'], true, [[2, '09:00', 60], [6, '07:00', 90]]],
+  ['Mia Garcia', true, true, ['3.5'], false, [[1, '17:00', 120], [5, '18:00', 120]]],
+  ['Carol Lee', true, true, ['4.0'], true, [[1, '07:00', 60], [8, '12:00', 90]]],
+  ['David Kim', false, true, ['4.0', '4.5'], false, [[1, '07:00', 90]]],
+  ['Olivia Clark', true, true, ['4.5'], true, [[3, '15:00', 120]]],
+  ['Paul Rodriguez', true, false, ['4.5'], true, [[3, '15:30', 90]]],
+  ['Emma Brown', true, true, ['3.0'], false, [[4, '11:00', 60], [10, '09:30', 60]]],
+  ['Frank Davis', true, true, ['3.0'], false, [[4, '10:30', 120]]],
+  ['Noah Robinson', false, true, ['3.5'], false, [[6, '07:00', 120], [12, '18:30', 90]]],
 ];
 if (!(await table('casual_slots', '?select=id&limit=1')).length) {
   const thursday = addDays(SUNDAY, -3);
-  await insert('casual_prefs', casual.map(([n, show, notify, levels]) => ({
-    account_email: byName(n).account_email, show_name: show, notify, levels })),
+  await insert('casual_prefs', casual.map(([n, show, notify, levels, share]) => ({
+    account_email: byName(n).account_email, show_name: show, notify, levels, share_contact: share })),
     'resolution=merge-duplicates,return=minimal');
-  await insert('casual_slots', casual.flatMap(([n, , , , slots]) => slots.map(([d, start, minutes, type]) => ({
-    player_id: who(n), starts_at: et(addDays(thursday, d), start), minutes, play_type: type,
+  await insert('casual_slots', casual.flatMap(([n, , , , , slots]) => slots.map(([d, start, minutes]) => ({
+    player_id: who(n), starts_at: et(addDays(thursday, d), start), minutes,
     created_at: et(addDays(thursday, -2), '10:00') }))), 'return=minimal');   // posted Tuesday, past the email wait
 }
 

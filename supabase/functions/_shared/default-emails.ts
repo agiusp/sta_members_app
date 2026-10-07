@@ -42,7 +42,7 @@ This link works once and expires after 24 hours. If it has expired, contact {{co
 
 Once your password is set, you can sign up for Sunday Doubles each week from Monday 9am until noon on Saturday.
 
-What the app stores: your name, email address, play level, sex, which Sundays you played, and any Casual Play times you post. Only the program organizers can see your email address. Other players see names on the court assignments. On the Casual Play calendar, they see the sex and play level of anyone who posts a time, and the name only if that player chooses to show it. When Casual Play times line up, players who show their name for those times get each other's names and email addresses. To be removed, contact {{contacts}}.
+What the app stores: your name, email address, play level, sex, which Sundays you played, and any Casual Play times you post. Only the program organizers can see your email address. Other players see names on the court assignments. On the Casual Play calendar, they see the sex and play level of anyone who posts a time, and the name only if that player chooses to show it. When Casual Play times line up, players who share their contact info for those times get each other's names and email addresses. To be removed, contact {{contacts}}.
 `,
     placeholders: {
       player_names: "the member's name",
@@ -235,15 +235,15 @@ Questions? Contact {{contacts}}
     key: "casual_game",
     name: "Casual Play: players line up with your time",
     sent: "When another player's time lines up with yours, once both times have been posted for the waiting time in Casual Play Settings (2 hours by default); again whenever someone new lines up",
-    to: "The player who posted the time, if they show their name for it. Only players who also show their name are listed",
+    to: "The player who posted the time, if they have \"Email me\" on and share their contact info for that time. Only players who also share theirs are listed",
     subject: "Casual Play: players free {{when}}",
     body: `Hello {{first_name}},
 
-Good news: other players are free at the same time as you on {{when}} ({{looking_for}}), at levels that suit you:
+Good news: other players are free at the same time as you on {{when}}, at levels that suit you:
 
 {{players}}
 {{hidden_note}}
-Get in touch with each other (reply-all works if you copy the addresses above) to decide who plays: a singles game, or a doubles game if there are four of you (you can also invite a fourth player). Then book a court.
+You all share your contact info for these times, so get in touch with each other (reply-all works if you copy the addresses above) to decide who plays: a singles game, or a doubles game if there are four of you. Then book a court.
 
 If more players line up with your time, we'll email you again.
 
@@ -253,44 +253,71 @@ Once you've set up a game, please remove this time from the Casual Play calendar
     placeholders: {
       first_name: "the player's first name",
       when: "the day and time of the player's posted time, e.g. \"Tuesday, October 13, 8:00 – 9:30 AM\"",
-      looking_for: "\"singles\", \"doubles\" or \"singles or doubles\": what the player is looking for",
-      players: "one line per player who lines up: name, sex and level, email address, the time they share and what they're looking for; \"(new)\" marks players added since the last email (required)",
-      hidden_note: "a line saying how many more players line up but haven't shown their name yet (empty if none)",
+      players: "one line per player who lines up and shares their contact info: name, sex and level, email address and the time they share; \"(new)\" marks players added since the last email (required)",
+      hidden_note: "a line saying how many more players line up but don't share their contact info (empty if none)",
       slot_link: "the link that opens this time on the Casual Play calendar, where the player can Unsubmit it",
     },
     sample: {
-      first_name: "Yara", when: "Tuesday, October 13, 8:00 – 9:30 AM", looking_for: "singles or doubles",
-      players: "Alice Johnson (F, 3.5) alice.johnson@example.com: free 8:00 – 9:30 AM, singles or doubles\nBob Smith (M, 3.5) bob.smith@example.com: free 8:00 – 9:00 AM, singles (new)",
-      hidden_note: "\n1 more player lines up but hasn't shown their name yet. We've asked them to.\n",
+      first_name: "Yara", when: "Tuesday, October 13, 8:00 – 9:30 AM",
+      players: "Alice Johnson (F, 3.5) alice.johnson@example.com: free 8:00 – 9:30 AM\nBob Smith (M, 3.5) bob.smith@example.com: free 8:00 – 9:00 AM (new)",
+      hidden_note: "\n1 more player lines up but doesn't share their contact info yet. We've asked them to.\n",
       slot_link: "https://<app address>/app/casual.html?slot=123",
     },
   },
   {
     key: "casual_reveal",
-    name: "Casual Play: show your name to meet players",
-    sent: "When another player's time lines up with yours and your name is hidden for that time, once both times have been posted for the waiting time in Casual Play Settings (2 hours by default); again whenever someone new lines up",
-    to: "The player who posted the time, if their name is hidden for it",
-    subject: "Casual Play: players free {{when}} – show your name to meet them",
+    name: "Casual Play: share your contact info to set up a game",
+    sent: "When another player's time lines up with yours and you don't share your contact info for that time, once both times have been posted for the waiting time in Casual Play Settings (2 hours by default); again whenever someone new lines up",
+    to: "The player who posted the time, if they have \"Email me\" on and don't share their contact info for that time",
+    subject: "Casual Play: players free {{when}} – share your contact info to play",
     body: `Hello {{first_name}},
 
-Other players are free at the same time as you on {{when}} ({{looking_for}}), at levels that suit you:
+Other players are free at the same time as you on {{when}}, at levels that suit you:
 
 {{others}}
 
-Your name is hidden for that time, so they don't know about you yet. To get their names and email addresses, and to let them know about you, turn on "Show my name" for that time:
+You don't share your contact info for that time, so you can't set up a game together yet. To get the email addresses of the players who share theirs, and to let them reach you, turn on "Share my contact info for games" for that time:
 {{reveal_link}}
 `,
     placeholders: {
       first_name: "the player's first name",
       when: "the day and time of the player's posted time",
-      looking_for: "\"singles\", \"doubles\" or \"singles or doubles\": what the player is looking for",
-      others: "one line per player who lines up: name (if they show it), sex and level, the time they share and what they're looking for (required)",
-      reveal_link: "the link that opens this time on the Casual Play calendar, with its Show my name switch (required)",
+      others: "one line per player who lines up: name (if they show it or share their contact info), sex and level, and the time they share (required)",
+      reveal_link: "the link that opens this time on the Casual Play calendar, with its Share my contact info switch (required)",
     },
     sample: {
-      first_name: "Bob", when: "Tuesday, October 13, 8:00 – 9:30 AM", looking_for: "singles or doubles",
-      others: "Alice Johnson (F, 3.5): free 8:00 – 9:30 AM, singles or doubles\nA player who hasn't shown their name yet (M, 4.0): free 8:30 – 9:30 AM, doubles",
+      first_name: "Bob", when: "Tuesday, October 13, 8:00 – 9:30 AM",
+      others: "Alice Johnson (F, 3.5): free 8:00 – 9:30 AM\nA player who hasn't shown their name (M, 4.0): free 8:30 – 9:30 AM",
       reveal_link: "https://<app address>/app/casual.html?slot=123",
+    },
+  },
+  {
+    key: "casual_invite",
+    name: "Casual Play: a player would like to set up a game",
+    sent: "When a player who shares their contact info clicks \"Email them\" on a possible singles or doubles game (once per time, game and player)",
+    to: "The players in that game who don't share their contact info for their time",
+    subject: "Casual Play: {{inviter}} would like a {{game}} game {{when}}",
+    body: `Hello {{first_name}},
+
+Your Casual Play time lines up with a possible {{game}} game on {{when}}:
+
+{{players}}
+
+{{inviter}} would like to set it up, but you don't share your contact info for that time, so they can't reach you. To play, email the players above who shared their email address, or turn on "Share my contact info for games" for that time:
+{{slot_link}}
+`,
+    placeholders: {
+      first_name: "the player's first name",
+      inviter: "the name of the player who asked the app to send this email",
+      game: "\"singles\" or \"doubles\"",
+      when: "the day and the hour the players share, e.g. \"Tuesday, October 13, 8:00 – 9:00 AM\"",
+      players: "one line per other player in the game: name and email address for those who share their contact info; for the others, their name only if they show it, plus sex and level (required)",
+      slot_link: "the link that opens the player's time on the Casual Play calendar",
+    },
+    sample: {
+      first_name: "Bob", inviter: "Alice Johnson", game: "doubles", when: "Tuesday, October 13, 8:00 – 9:00 AM",
+      players: "Alice Johnson (F, 3.5) alice.johnson@example.com\nHenry Moore (M, 3.5) henry.moore@example.com\nA player who doesn't share their contact info (F, 3.5)",
+      slot_link: "https://<app address>/app/casual.html?slot=123",
     },
   },
 

@@ -91,8 +91,7 @@ function emailsFor(task: any, t0: Templates, appUrl: string, programName: string
       });
     case "casual_games":
       return task.emails.map((r: any) => {
-        const common = { first_name: r.first_name, when: E.casualWhen(r.starts_at, r.ends_at),
-                         looking_for: E.CASUAL_LOOKING_FOR[r.play_type] ?? r.play_type };
+        const common = { first_name: r.first_name, when: E.casualWhen(r.starts_at, r.ends_at) };
         return r.kind === "game"
           ? { kind: "casual_game", to: r.email, email: R("casual_game", {
               ...common, players: E.casualPlayerLines(r.others), hidden_note: E.casualHiddenNote(r.hidden_count),

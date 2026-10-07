@@ -82,28 +82,28 @@ export function casualWhen(startsIso: string, endsIso: string): string {
   return `${day}, ${from.slice(-2) === to.slice(-2) ? from.slice(0, -3) : from} – ${to}`;
 }
 
-export const CASUAL_LOOKING_FOR: Record<string, string> = {
-  singles: "singles", doubles: "doubles", either: "singles or doubles",
-};
-
 // One line per player whose Casual Play time lines up with yours:
-// "Alice Johnson (F, 3.5) alice@example.com: free 8:00 – 9:30 AM, singles or doubles (new)".
+// "Alice Johnson (F, 3.5) alice@example.com: free 8:00 – 9:30 AM (new)".
 // "(new)" only when some of the players were in an earlier email.
 export function casualPlayerLines(others: any[] | null): string {
   const list = others ?? [];
   const markNew = list.some(o => !o.new);
   return list.map(o => {
-    const about = [o.sex, o.level].filter(Boolean).join(", ");
     const [from, to] = [timeLabel(o.starts_at), timeLabel(o.ends_at)];
     const free = `${from.slice(-2) === to.slice(-2) ? from.slice(0, -3) : from} – ${to}`;
-    return `${o.name ?? "A player who hasn't shown their name yet"}${about ? ` (${about})` : ""}${o.email ? ` ${o.email}` : ""}` +
-      `: free ${free}, ${CASUAL_LOOKING_FOR[o.play_type] ?? o.play_type}${markNew && o.new ? " (new)" : ""}`;
+    return `${casualPerson(o, "A player who hasn't shown their name")}: free ${free}${markNew && o.new ? " (new)" : ""}`;
   }).join("\n");
+}
+
+// "Alice Johnson (F, 3.5) alice@example.com", or "<nameless> (M, 4.0)".
+export function casualPerson(o: any, nameless: string): string {
+  const about = [o.sex, o.level].filter(Boolean).join(", ");
+  return `${o.name ?? nameless}${about ? ` (${about})` : ""}${o.email ? ` ${o.email}` : ""}`;
 }
 
 export function casualHiddenNote(count: number): string {
   if (!count) return "";
-  return `\n${count} more player${count === 1 ? "" : "s"} line${count === 1 ? "s" : ""} up but ha${count === 1 ? "sn't" : "ven't"} shown their name yet. We've asked them to.\n`;
+  return `\n${count} more player${count === 1 ? "" : "s"} line${count === 1 ? "s" : ""} up but ${count === 1 ? "doesn't" : "don't"} share their contact info yet. We've asked them to.\n`;
 }
 
 export const WEATHER_OPTION: Record<string, string> = {

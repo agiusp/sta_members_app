@@ -8,7 +8,7 @@
 <style>
   body { --page-width: 1100px; }
   /* Number of players available in a half hour: pale to dark purple. */
-  :root { --heat-1: #ede9f7; --heat-2: #d3c9ee; --heat-3: #a999dc; --heat-4: #6f58bd; }
+  :root { --heat-1: #ede9f7; --heat-2: #d3c9ee; --heat-3: #a999dc; --heat-4: #6f58bd; --game-s: #ff7a00; --game-d: #00b140; }
 
   .levels { display: flex; flex-wrap: wrap; gap: 6px; }
   .levels label {
@@ -51,6 +51,9 @@
   table.cal td.c.past:hover { outline: none; }
   /* Your own times: a yellow-and-navy edge. */
   table.cal td.c.mine { box-shadow: inset 4px 0 0 var(--accent), inset -4px 0 0 var(--ball); }
+  /* Possible games on your times: a bright orange ring for singles, green for doubles. */
+  table.cal td.c.game-s { box-shadow: inset 0 0 0 3px var(--game-s); }
+  table.cal td.c.game-d { box-shadow: inset 0 0 0 3px var(--game-d); }
   /* The time box being set up. */
   table.cal td.c.draft { background: #fffbd6; box-shadow: inset 2px 0 0 var(--accent), inset -2px 0 0 var(--accent); color: var(--accent); }
   table.cal td.c.draft-top { box-shadow: inset 2px 0 0 var(--accent), inset -2px 0 0 var(--accent), inset 0 2px 0 var(--accent); }
@@ -64,7 +67,7 @@
   }
   .tip strong { display: block; margin-bottom: 3px; }
 
-  .side { position: sticky; top: 12px; }
+  .side { position: sticky; top: 12px; max-height: calc(100vh - 24px); overflow-y: auto; }
   .side h3 { font-family: var(--serif); font-size: 18px; margin: 0 0 6px; }
   .side .when { font-size: 15px; margin: 0 0 12px; }
   .side .field { margin-bottom: 12px; }
@@ -76,11 +79,21 @@
   .people .lvl { color: var(--muted); }
   .side .actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 4px; }
   .side-close { display: none; }
-  .types { display: flex; gap: 6px; }
-  .types button { flex: 1; min-height: 36px; padding: 5px 8px; }
-  .types button.secondary.active { background: var(--accent); color: #fff; }
-  .lines-up { font-size: 13px; background: var(--green-bg); border-left: 3px solid var(--green-border); border-radius: 4px; padding: 6px 8px; margin: 6px 0; }
-  .lines-up ul { margin: 4px 0 0; padding-left: 18px; }
+  .share-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; font-size: 14px; }
+  .yesno { display: inline-flex; }
+  .yesno button { min-height: 32px; padding: 4px 14px; font-size: 13px; }
+  .yesno button:first-child { border-radius: 6px 0 0 6px; }
+  .yesno button:last-child { border-radius: 0 6px 6px 0; border-left: none; }
+  .yesno button.secondary.active { background: var(--accent); color: #fff; }
+  .games { font-size: 13px; border: 2px solid var(--game-s); border-radius: 6px; padding: 8px 10px; margin: 8px 0 10px; }
+  .games.has-doubles { border-color: var(--game-d); }
+  .games h4 { margin: 8px 0 0; font-size: 13px; }
+  .games .people label.check { font-size: 13px; color: var(--ink); font-weight: 400; flex-direction: row; align-items: flex-start; gap: 6px; }
+  .games .actions { margin-top: 6px; }
+  .games .actions button { min-height: 32px; padding: 4px 10px; font-size: 13px; }
+  .share-yes { color: #1d5e30; }
+  .share-no { color: var(--muted); }
+  .msg.warn { background: #fff4e5; border: 1px solid var(--game-s); color: #7a3d00; margin: 6px 0; }
 
   /* Narrow screens: the calendar scrolls sideways, and the side panel becomes
      a sheet at the bottom of the screen while a time is chosen. */
@@ -108,6 +121,8 @@
     <div>
       <div class="panel-title" style="margin-bottom:8px">My settings</div>
       <label class="check"><input type="checkbox" id="showName"> Show my name on the times I post (you can change it for each time)</label>
+      <div class="share-row" style="margin-top:6px">Share my contact info for games <span id="shareContact"></span>
+        <span class="muted" style="font-size:13px">(you can change it for each time)</span></div>
       <label class="check" style="margin-top:6px"><input type="checkbox" id="notify"> Email me when players' times line up with mine</label>
     </div>
   </div>
@@ -147,9 +162,7 @@
   let draft = null;      // { day, start, minutes, playerId }: the time box being set up
   let picked = null;     // { day, t }: a half hour clicked on one of your own times
   let busy = false;
-  const TYPE_LABEL = { singles: 'Singles', doubles: 'Doubles', either: 'Singles or doubles' };
-  let lastType = 'either';
-  try { lastType = localStorage.getItem('sta-casual-type') || 'either'; } catch (_) { /* storage blocked */ }
+  const doublesPick = {}; // slot id -> { t, ids }: the 3 players ticked for a doubles game, when more could play
 
   // ---------- Times and days ----------
   function addDays(ymd, n) {
@@ -172,6 +185,13 @@
   }
   const hhmm = min => `${String(Math.floor(min / 60)).padStart(2, '0')}:${String(min % 60).padStart(2, '0')}`;
   const hours = min => (min / 60) + (min === 60 ? ' hr' : ' hrs');
+  // An ISO time as minutes after midnight, US Eastern.
+  const ET = new Intl.DateTimeFormat('en-US', { timeZone: STA.TZ, hour: 'numeric', minute: 'numeric', hourCycle: 'h23' });
+  function etMin(iso) {
+    const p = Object.fromEntries(ET.formatToParts(new Date(iso)).map(x => [x.type, x.value]));
+    return Number(p.hour) * 60 + Number(p.minute);
+  }
+  const isoRange = (a, b) => range(etMin(a), etMin(b) - etMin(a));
 
   // ---------- Who is available ----------
   // Others are shown at the chosen levels (and when their level is unknown); your own times always.
@@ -186,7 +206,107 @@
   function personLine(s) {
     const about = [s.sex || '?', s.level ? `level ${s.level}` : 'level not set'].join(' · ');
     return `<span>${s.name ? `<strong>${esc(s.name)}</strong>` : '<em>Name not shown</em>'}</span>
-      <span class="lvl">· ${esc(about)} · ${esc(range(s.start, s.minutes))} · ${esc(TYPE_LABEL[s.play_type] || '')}</span>`;
+      <span class="lvl">· ${esc(about)} · ${esc(range(s.start, s.minutes))}</span>`;
+  }
+
+  // ---------- Possible games on your times ----------
+  // At half hour t of your time s: the players whose times line up with it
+  // then (singles), and the players who make a four with you then (doubles).
+  function gamesAt(s, t) {
+    const list = s.lines_up || [];
+    const singles = list.filter(o => etMin(o.starts_at) <= t && t < etMin(o.ends_at));
+    const four = new Set();
+    for (const d of s.doubles || []) {
+      const w = etMin(d.starts_at);
+      if (w <= t && t < w + 60) d.others.forEach(id => four.add(id));
+    }
+    return { singles, doubles: list.filter(o => four.has(o.slot_id)) };
+  }
+  // 'd' (doubles possible), 's' (singles) or '' for a half hour of the calendar.
+  function cellGame(day, t) {
+    let g = '';
+    for (const s of at(day, t).filter(x => x.mine)) {
+      const x = gamesAt(s, t);
+      if (x.doubles.length) return 'd';
+      if (x.singles.length) g = 's';
+    }
+    return g;
+  }
+  // The email addresses to copy straight away when a half hour is clicked:
+  // when you and everyone in the one possible game there share contact info.
+  function readyEmails(day, t) {
+    for (const s of at(day, t).filter(x => x.mine && x.shares)) {
+      const g = gamesAt(s, t);
+      if (g.doubles.length === 3 && g.doubles.every(o => o.email)) return g.doubles.map(o => o.email);
+      if (!g.doubles.length && g.singles.length === 1 && g.singles[0].email) return [g.singles[0].email];
+    }
+    return null;
+  }
+
+  const yesNo = (key, on) => `<span class="yesno" role="group" aria-label="Share my contact info for games">${[[true, 'Yes'], [false, 'No']].map(([v, label]) =>
+    `<button type="button" class="secondary ${on === v ? 'active' : ''}" data-share="${key}" data-v="${v ? 1 : 0}" aria-pressed="${on === v}" ${busy ? 'disabled' : ''}>${label}</button>`).join('')}</span>`;
+
+  function gamesPanel(s, t) {
+    const { singles, doubles } = gamesAt(s, t);
+    if (!singles.length) {
+      return (s.lines_up || []).length
+        ? '<p class="muted">No game at this half hour. Click a half hour of this time with an orange (singles) or green (doubles) ring.</p>'
+        : '';
+    }
+    const who = o => `${o.name ? `<strong>${esc(o.name)}</strong>` : '<em>Name not shown</em>'}
+      <span class="lvl">· ${esc([o.sex, o.level].filter(Boolean).join(' · '))} · free ${esc(isoRange(o.starts_at, o.ends_at))}</span><br>
+      ${o.email ? `<span class="share-yes">${esc(o.email)}</span>`
+        : o.shares ? '<span class="share-yes">Shares contact info</span>' : '<span class="share-no">Doesn\'t share contact info</span>'}`;
+    let html = `<div class="games ${doubles.length ? 'has-doubles' : ''}"><div class="panel-title" style="margin-bottom:0">Possible games at ${esc(clock(t))}</div>`;
+    if (!s.shares) {
+      html += `<div class="msg warn">Your contact info isn't shared for this time. To set up a game, choose Yes for "Share my contact info for games" above.
+        ${[...singles].some(o => o.shares) ? '' : ' None of these players share theirs yet either.'}</div>`;
+    }
+    if (doubles.length) {
+      let pick = doublesPick[s.id]?.t === t ? doublesPick[s.id].ids.filter(id => doubles.some(o => o.slot_id === id)) : null;
+      if (!pick) pick = doubles.slice(0, 3).map(o => o.slot_id);
+      doublesPick[s.id] = { t, ids: pick };
+      const choose = doubles.length > 3;
+      html += `<h4>Doubles</h4>${choose ? '<p class="muted" style="margin:2px 0">More than 3 players could make a four with you. Tick the 3 to play with.</p>' : ''}
+        <ul class="people">${doubles.map(o => {
+          const on = pick.includes(o.slot_id);
+          return `<li>${choose ? `<label class="check"><input type="checkbox" data-pick="${s.id}" value="${o.slot_id}" ${on ? 'checked' : ''}
+            ${!on && pick.length >= 3 ? 'disabled' : ''}><span>${who(o)}</span></label>` : who(o)}</li>`;
+        }).join('')}</ul>
+        ${gameActions(s, 'doubles', doubles.filter(o => pick.includes(o.slot_id)), t)}`;
+    }
+    html += `<h4>Singles</h4><ul class="people">${singles.map(o => `<li>${who(o)}${gameActions(s, 'singles', [o], t)}</li>`).join('')}</ul></div>`;
+    return html;
+  }
+
+  // Copy the email addresses when everyone shares; otherwise, if you share,
+  // have the app email the players who don't.
+  function gameActions(s, kind, group, t) {
+    if (!s.shares) return '';
+    if (kind === 'doubles' && group.length !== 3) return '<p class="muted" style="margin:4px 0">Tick 3 players.</p>';
+    if (group.every(o => o.email)) {
+      const emails = group.map(o => o.email).join(', ');
+      const subject = `Casual Play ${kind}: ${dayLabel(s.day, { weekday: 'long', month: 'short', day: 'numeric' })}, ${clock(t)}`;
+      return `<div class="actions">
+        <button type="button" data-act="copy" data-emails="${esc(emails)}">Copy email${group.length > 1 ? 's' : ''}</button>
+        <button type="button" class="secondary" data-act="mailto" data-href="${esc(`mailto:${emails}?subject=${encodeURIComponent(subject)}`)}">Write email</button></div>`;
+    }
+    const ask = group.filter(o => !o.shares);
+    const asked = ask.every(o => (o.asked || []).includes(kind));
+    const label = asked ? 'Emailed' : kind === 'singles' ? 'Email them about this game'
+      : ask.length === 1 ? 'Email the player who doesn\'t share' : `Email the ${ask.length} players who don't share`;
+    return `<div class="actions"><button type="button" class="secondary" data-act="invite" data-kind="${kind}" data-slot="${s.id}"
+      data-others="${group.map(o => o.slot_id).join(',')}" ${asked || busy ? 'disabled' : ''}>${esc(label)}</button></div>`;
+  }
+
+  async function copyEmails(emails, auto) {
+    const then = 'Send them an email to set up your game.';
+    try {
+      await navigator.clipboard.writeText(emails);
+      showMessage($('sideMsg'), `${auto ? 'Everyone in this game shares their contact info, so we copied' : 'Copied'} ${emails}. ${then}`, 'ok');
+    } catch (_) {
+      showMessage($('sideMsg'), `Email addresses: ${emails}. ${then}`, 'ok');
+    }
   }
 
   // ---------- Loading ----------
@@ -225,7 +345,10 @@
     const s = data.slots.find(x => x.mine && x.id === id);
     if (!s) { showMessage($('calMsg'), 'That time has passed or was removed.'); return; }
     week = Math.min(3, Math.floor(days.indexOf(s.day) / 7));
-    picked = { day: s.day, t: s.start };
+    // Open it at its first half hour with a possible game, if any.
+    let t = s.start;
+    while (t + 30 < s.start + s.minutes && !gamesAt(s, t).singles.length) t += 30;
+    picked = { day: s.day, t: gamesAt(s, t).singles.length ? t : s.start };
     draft = null;
     setTimeout(() => $('side').scrollIntoView({ behavior: 'smooth', block: 'start' }), 50);
   }
@@ -239,6 +362,7 @@
         <input type="checkbox" value="${esc(l)}" ${on ? 'checked' : ''} ${off ? 'disabled' : ''}> ${esc(LEVEL_LABEL[l] || l)}</label>`;
     }).join('');
     $('showName').checked = prefs.show_name;
+    $('shareContact').innerHTML = yesNo('prefs', prefs.share_contact);
     $('notify').checked = prefs.notify;
   }
 
@@ -249,7 +373,8 @@
     render();
     showMessage($('prefsMsg'), '');
     try {
-      prefs = await rpc('casual_save_prefs', { p_show_name: prefs.show_name, p_notify: prefs.notify, p_levels: prefs.levels });
+      prefs = await rpc('casual_save_prefs', { p_show_name: prefs.show_name, p_notify: prefs.notify, p_levels: prefs.levels,
+                                               p_share_contact: prefs.share_contact });
       await load();
     } catch (err) {
       prefs = before;
@@ -267,6 +392,10 @@
   });
   $('showName').addEventListener('change', () => savePrefs({ show_name: $('showName').checked }));
   $('notify').addEventListener('change', () => savePrefs({ notify: $('notify').checked }));
+  $('shareContact').addEventListener('click', e => {
+    const b = e.target.closest('button[data-share]');
+    if (b) savePrefs({ share_contact: b.dataset.v === '1' });
+  });
 
   // ---------- Calendar ----------
   function render() {
@@ -278,7 +407,9 @@
     }).join('');
     $('legend').innerHTML = 'Players available:' +
       ['1', '2', '3', '4+'].map((n, i) => `<span><span class="sw" style="background:var(--heat-${i + 1})"></span>${n}</span>`).join('') +
-      `<span><span class="sw" style="box-shadow: inset 4px 0 0 var(--accent), inset -4px 0 0 var(--ball)"></span>Your times</span>`;
+      `<span><span class="sw" style="box-shadow: inset 4px 0 0 var(--accent), inset -4px 0 0 var(--ball)"></span>Your times</span>` +
+      `<span><span class="sw" style="box-shadow: inset 0 0 0 3px var(--game-s)"></span>Singles possible</span>` +
+      `<span><span class="sw" style="box-shadow: inset 0 0 0 3px var(--game-d)"></span>Doubles possible</span>`;
 
     const head = `<tr><th class="time-col"></th>${weekDays.map(d =>
       `<th class="${d === data.today ? 'today' : ''}">${esc(dayLabel(d, { weekday: 'short' }))}<br>${esc(dayLabel(d, { month: 'short', day: 'numeric' }))}</th>`).join('')}</tr>`;
@@ -292,12 +423,15 @@
         if (past) cls.push('past');
         else if (here.length) cls.push('h' + Math.min(here.length, 4));
         if (here.some(s => s.mine)) cls.push('mine');
+        const game = past ? '' : cellGame(d, t);
+        if (game) cls.push('game-' + game);
         if (draft && draft.day === d && t >= draft.start && t < draft.start + draft.minutes) {
           cls.push('draft');
           if (t === draft.start) cls.push('draft-top');
           if (t + 30 === draft.start + draft.minutes) cls.push('draft-bottom');
         }
-        const label = `${dayLabel(d, { weekday: 'long', month: 'long', day: 'numeric' })}, ${clock(t)}: ${here.length} available`;
+        const label = `${dayLabel(d, { weekday: 'long', month: 'long', day: 'numeric' })}, ${clock(t)}: ${here.length} available` +
+          (game ? `, ${game === 'd' ? 'doubles' : 'singles'} game possible` : '');
         rows += `<td class="${cls.join(' ')}" data-day="${d}" data-t="${t}" ${past ? '' : 'tabindex="0" role="button"'} aria-label="${esc(label)}">${!past && here.length ? here.length : ''}</td>`;
       }
       rows += '</tr>';
@@ -320,7 +454,9 @@
     if (!here.length) { $('tip').hidden = true; return; }
     const t = Number(td.dataset.t);
     $('tip').innerHTML = `<strong>${esc(dayLabel(td.dataset.day, { weekday: 'short', month: 'short', day: 'numeric' }))}, ${esc(range(t, 30))}</strong>` +
-      here.map(s => `<div>${s.mine ? 'You: ' : ''}${s.name ? esc(s.name) : 'Name not shown'} · ${esc(s.sex || '?')} · ${esc(s.level || 'level not set')} · ${esc(TYPE_LABEL[s.play_type] || '')}</div>`).join('');
+      here.map(s => `<div>${s.mine ? 'You: ' : ''}${s.name ? esc(s.name) : 'Name not shown'} · ${esc(s.sex || '?')} · ${esc(s.level || 'level not set')}</div>`).join('') +
+      ({ d: '<div><strong style="margin:4px 0 0">Doubles possible: click to set it up</strong></div>',
+         s: '<div><strong style="margin:4px 0 0">Singles possible: click to set it up</strong></div>' }[cellGame(td.dataset.day, t)] || '');
     $('tip').hidden = false;
     const x = Math.min(e.clientX + 14, window.innerWidth - $('tip').offsetWidth - 8);
     const y = e.clientY + 16 + $('tip').offsetHeight > window.innerHeight ? e.clientY - $('tip').offsetHeight - 10 : e.clientY + 16;
@@ -342,13 +478,20 @@
   function choose(day, t) {
     showMessage($('calMsg'), '');
     if (isPast(day, t)) return;
-    if (at(day, t).some(s => s.mine)) { picked = { day, t }; draft = null; render(); return; }
+    if (at(day, t).some(s => s.mine)) {
+      picked = { day, t };
+      draft = null;
+      render();
+      const emails = readyEmails(day, t);
+      if (emails) copyEmails(emails.join(', '), true);
+      return;
+    }
     picked = null;
     const playerId = draft && data.players.some(p => p.id === draft.playerId) ? draft.playerId : data.players[0]?.id;
     // A 1-hour box from the half hour clicked; near 9pm it starts earlier so it fits.
     let startAt = Math.min(t, LAST - 60);
     if (isPast(day, startAt)) startAt = t;
-    const d = { day, start: startAt, minutes: 60, playerId, playType: lastType, showName: prefs.show_name };
+    const d = { day, start: startAt, minutes: 60, playerId, showName: prefs.show_name, share: prefs.share_contact };
     const fits = LENGTHS.filter(m => lengthOk(d, m));
     if (!fits.length) {
       draft = null;
@@ -370,19 +513,6 @@
     if (td && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); choose(td.dataset.day, Number(td.dataset.t)); }
   });
 
-  // The players whose times line up with one of your times (with match emails on).
-  function linesUp(slot) {
-    const list = slot.lines_up || [];
-    if (!list.length) return '';
-    const et = iso => new Date(iso).toLocaleTimeString('en-US', { timeZone: STA.TZ, hour: 'numeric', minute: '2-digit' });
-    const when = o => { const [a, b] = [et(o.starts_at), et(o.ends_at)]; return `${a.slice(-2) === b.slice(-2) ? a.slice(0, -3) : a} – ${b}`; };
-    const note = slot.shown ? 'Players who show their name get your name and email address by email, and you get theirs.'
-      : 'Your name is hidden for this time: show it to swap names and email addresses with these players.';
-    return `<div class="lines-up"><strong>Lines up with ${list.length} player${list.length === 1 ? '' : 's'}</strong><ul>${list.map(o =>
-      `<li>${esc(o.name || 'A player who hasn\'t shown their name')} (${esc([o.sex, o.level].filter(Boolean).join(', '))}): ${esc(when(o))}, ${esc(LOOKING_FOR[o.play_type])}</li>`).join('')}</ul>
-      <span class="muted">${esc(note)}</span></div>`;
-  }
-  const LOOKING_FOR = { singles: 'singles', doubles: 'doubles', either: 'singles or doubles' };
 
   // ---------- Side panel ----------
   function renderSide() {
@@ -405,11 +535,9 @@
         <div class="field"><label>How long</label>
           <div class="lengths">${LENGTHS.map(m => `<button type="button" class="secondary ${m === draft.minutes ? 'active' : ''}"
             data-len="${m}" ${lengthOk(draft, m) ? '' : 'disabled'} aria-pressed="${m === draft.minutes}">${hours(m)}</button>`).join('')}</div></div>
-        <div class="field"><label>Looking for</label>
-          <div class="types">${['singles', 'doubles', 'either'].map(t => `<button type="button" class="secondary ${t === draft.playType ? 'active' : ''}"
-            data-type="${t}" aria-pressed="${t === draft.playType}">${t === 'either' ? 'Either' : TYPE_LABEL[t]}</button>`).join('')}</div></div>
         <div class="field"><label class="check" style="font-size:14px;color:var(--ink);font-weight:400">
           <input type="checkbox" id="draftShowName" ${draft.showName ? 'checked' : ''}> Show my name for this time</label></div>
+        <div class="field share-row">Share my contact info for games ${yesNo('draft', draft.share)}</div>
         ${prefs.notify ? '' : '<p class="muted">To hear by email when other players\' times line up with yours, tick "Email me when players\' times line up with mine" above.</p>'}
         ${lapsed ? `<div class="msg error">${esc(data.dues_message)}</div>` : ''}
         <div class="actions">
@@ -432,11 +560,11 @@
         <h3>Your availability</h3>
         ${mine.map(s => `<div class="field">
           <p class="when"><strong>${esc(dayLabel(s.day, { weekday: 'long', month: 'short', day: 'numeric' }))}</strong><br>${esc(range(s.start, s.minutes))}
-            · ${esc(TYPE_LABEL[s.play_type])}
             ${data.players.length > 1 ? `<br><span class="muted">${esc(s.name)}</span>` : ''}</p>
           <label class="check" style="font-size:14px;color:var(--ink);font-weight:400;margin-bottom:8px">
             <input type="checkbox" data-slotname="${s.id}" ${s.shown ? 'checked' : ''} ${busy ? 'disabled' : ''}> Show my name for this time</label>
-          ${linesUp(s)}
+          <div class="share-row" style="margin-bottom:4px">Share my contact info for games ${yesNo(s.id, s.shares)}</div>
+          ${gamesPanel(s, picked.t)}
           <button class="danger" data-act="unsubmit" data-slot="${s.id}" ${busy ? 'disabled' : ''}>Unsubmit</button></div>`).join('')}
         <div id="sideMsg"></div>
         <div class="field" style="margin-top:14px"><div class="panel-title" style="margin-bottom:0">Also available then</div>
@@ -448,11 +576,18 @@
     side.innerHTML = `<h3>Post a time</h3>
       <p class="muted" style="margin-top:0">Click any hour or half hour on the calendar to set up a 1-hour time box (you can make it 1.5 or 2 hours), then click Submit.</p>
       <p class="muted">To take a time back, click one of your times and click Unsubmit.</p>
+      <p class="muted">An orange ring on your time means another player is free then too: a possible singles game. Green means a possible doubles game. Click it to set up the game.</p>
       <p class="muted" style="margin-bottom:0">Hover over a colored time to see who's available.</p>`;
   }
 
   $('side').addEventListener('change', async e => {
     if (e.target.id === 'draftShowName' && draft) { draft.showName = e.target.checked; return; }
+    if (e.target.dataset.pick) {
+      const p = doublesPick[e.target.dataset.pick], id = Number(e.target.value);
+      p.ids = e.target.checked ? [...p.ids, id] : p.ids.filter(x => x !== id);
+      render();
+      return;
+    }
     if (e.target.dataset.slotname) {
       if (busy) return;
       busy = true;
@@ -478,13 +613,39 @@
     const b = e.target.closest('button');
     if (!b || busy) return;
     if (b.dataset.len) { draft.minutes = Number(b.dataset.len); render(); return; }
-    if (b.dataset.type) {
-      draft.playType = lastType = b.dataset.type;
-      try { localStorage.setItem('sta-casual-type', lastType); } catch (_) { /* storage blocked */ }
-      render();
+    if (b.dataset.share === 'draft') { draft.share = b.dataset.v === '1'; render(); return; }
+    if (b.dataset.share) {
+      const share = b.dataset.v === '1';
+      busy = true;
+      try {
+        await rpc('casual_set_slot_share', { p_slot_id: Number(b.dataset.share), p_share: share });
+      } catch (err) { busy = false; showMessage($('sideMsg'), err.message); return; }
+      busy = false;
+      await load();
+      showMessage($('sideMsg'), share ? 'Your contact info is now shared for this time with players in a game with you who share theirs.'
+                                      : 'Your contact info is no longer shared for this time.', 'ok');
       return;
     }
     const act = b.dataset.act;
+    if (act === 'copy') { copyEmails(b.dataset.emails); return; }
+    if (act === 'mailto') { location.href = b.dataset.href; return; }
+    if (act === 'invite') {
+      busy = true;
+      b.disabled = true;
+      const { data: r, error } = await STA.client.functions.invoke('casual-invite', {
+        body: { slot_id: Number(b.dataset.slot), others: b.dataset.others.split(',').map(Number) }
+      });
+      let msg = null;
+      if (error) {
+        try { msg = (await error.context.json()).error || error.message; } catch (_) { msg = error.message; }
+      }
+      busy = false;
+      await load();
+      if (msg) showMessage($('sideMsg'), msg);
+      else if (r.off) showMessage($('sideMsg'), 'The organizers have switched these emails off.');
+      else showMessage($('sideMsg'), `We emailed ${r.sent === 1 ? 'them' : `the ${r.sent} players`} about the ${b.dataset.kind} game, with your name and email address, so they can reply to you.`, 'ok');
+      return;
+    }
     if (act === 'close' || act === 'cancel') { draft = null; picked = null; render(); return; }
     if (act === 'submit' || act === 'unsubmit') {
       busy = true;
@@ -493,7 +654,7 @@
       try {
         if (act === 'submit') {
           await rpc('casual_submit', { p_player_id: draft.playerId, p_date: draft.day, p_start: hhmm(draft.start), p_minutes: draft.minutes,
-                                       p_play_type: draft.playType, p_show_name: draft.showName });
+                                       p_show_name: draft.showName, p_share_contact: draft.share });
           picked = { day: draft.day, t: draft.start };
           draft = null;
           done = 'Submitted. Others at your level can now see it.';
