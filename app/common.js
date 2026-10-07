@@ -117,7 +117,7 @@ window.STA = (function () {
     { key: 'review_not_played', group: 'Sunday Doubles', name: 'Didn\'t play last Sunday', where: 'Game Review page, for members who weren\'t on a court',
       text: 'Our records show that you did not play on {{date}}, so there is no game for you to review. Only players who were assigned to a court that Sunday can review it.',
       placeholders: { date: 'the Sunday\'s date' } },
-    { key: 'casual_intro', group: 'Casual Play', name: 'How Casual Play works', where: 'Casual Play page, under My settings',
+    { key: 'casual_intro', group: 'Casual Play', name: 'How Casual Play works', where: 'Casual Play page, under the levels and Emails settings',
       text: 'Other members see the sex and play level of everyone who posts a time, and your name only if you show it for that time. An orange ring on one of your times means another player at a level that suits you both is free for at least an hour then: a possible singles game. A green ring means three such players are free together: a possible doubles game. Your name and email address only go to players in a game with you who also choose Yes for "Share my contact info for games". When everyone in a game shares, click the ring to copy their email addresses. If you share and some players don\'t, you can have the app email them about the game. With "Email me" on, you also hear by email when players\' times line up with yours.' },
     { key: 'news_website', group: 'News', name: 'Club website note', where: 'News page, under the posts',
       text: 'Club events, schedules and membership forms are on the club website: {{website}}', placeholders: { website: 'the club website link (Settings > App settings)' } }

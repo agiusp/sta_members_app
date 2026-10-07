@@ -87,7 +87,9 @@
   .yesno button.secondary.active { background: var(--accent); color: #fff; }
   .games { font-size: 13px; border: 2px solid var(--game-s); border-radius: 6px; padding: 8px 10px; margin: 8px 0 10px; }
   .games.has-doubles { border-color: var(--game-d); }
-  .games h4 { margin: 8px 0 0; font-size: 13px; }
+  /* A line in the box's color between the heading, Doubles and Singles. */
+  .games h4 { margin: 8px -10px 0; padding: 8px 10px 0; font-size: 13px; border-top: 2px solid var(--game-s); }
+  .games.has-doubles h4 { border-top-color: var(--game-d); }
   .games .people label.check { font-size: 13px; color: var(--ink); font-weight: 400; flex-direction: row; align-items: flex-start; gap: 6px; }
   .games .actions { margin-top: 6px; }
   .games .actions button { min-height: 32px; padding: 4px 10px; font-size: 13px; }
@@ -119,11 +121,8 @@
       <div class="levels" id="levels"></div>
     </div>
     <div>
-      <div class="panel-title" style="margin-bottom:8px">My settings</div>
-      <label class="check"><input type="checkbox" id="showName"> Show my name on the times I post (you can change it for each time)</label>
-      <div class="share-row" style="margin-top:6px">Share my contact info for games <span id="shareContact"></span>
-        <span class="muted" style="font-size:13px">(you can change it for each time)</span></div>
-      <label class="check" style="margin-top:6px"><input type="checkbox" id="notify"> Email me when players' times line up with mine</label>
+      <div class="panel-title" style="margin-bottom:8px">Emails</div>
+      <label class="check"><input type="checkbox" id="notify"> Email me when players' times line up with mine</label>
     </div>
   </div>
   <p class="muted" style="margin-bottom:0" id="casualIntro"></p>
@@ -156,7 +155,7 @@
   const LEVEL_LABEL = { '2.5': '2.5 and below', '5.0+': '5.0 and up' };
 
   let data = null;       // from casual_calendar
-  let prefs = null;      // { show_name, notify, levels }
+  let prefs = null;      // { notify, levels }
   let days = [];         // 'YYYY-MM-DD', today first
   let week = 0;          // 0..3
   let draft = null;      // { day, start, minutes, playerId }: the time box being set up
@@ -257,7 +256,7 @@
       <span class="lvl">· ${esc([o.sex, o.level].filter(Boolean).join(' · '))} · free ${esc(isoRange(o.starts_at, o.ends_at))}</span><br>
       ${o.email ? `<span class="share-yes">${esc(o.email)}</span>`
         : o.shares ? '<span class="share-yes">Shares contact info</span>' : '<span class="share-no">Doesn\'t share contact info</span>'}`;
-    let html = `<div class="games ${doubles.length ? 'has-doubles' : ''}"><div class="panel-title" style="margin-bottom:0">Possible games at ${esc(clock(t))}</div>`;
+    let html = `<div class="games ${doubles.length ? 'has-doubles' : ''}"><div class="panel-title" style="margin-bottom:0">Possible games at ${esc(clock(t))} on ${esc(dayLabel(s.day, { weekday: 'short', month: 'short', day: 'numeric' }).replace(',', ''))}</div>`;
     if (!s.shares) {
       html += `<div class="msg warn">Your contact info isn't shared for this time. To set up a game, choose Yes for "Share my contact info for games" above.
         ${[...singles].some(o => o.shares) ? '' : ' None of these players share theirs yet either.'}</div>`;
@@ -361,8 +360,6 @@
       return `<label class="${on ? 'on' : ''} ${off ? 'off' : ''}" title="${off ? 'Untick a level first (2 at most)' : ''}">
         <input type="checkbox" value="${esc(l)}" ${on ? 'checked' : ''} ${off ? 'disabled' : ''}> ${esc(LEVEL_LABEL[l] || l)}</label>`;
     }).join('');
-    $('showName').checked = prefs.show_name;
-    $('shareContact').innerHTML = yesNo('prefs', prefs.share_contact);
     $('notify').checked = prefs.notify;
   }
 
@@ -390,12 +387,7 @@
     if (!levels.length) { renderPrefs(); showMessage($('prefsMsg'), 'Keep at least 1 level ticked.'); return; }
     savePrefs({ levels: data.levels.filter(x => levels.includes(x)) });
   });
-  $('showName').addEventListener('change', () => savePrefs({ show_name: $('showName').checked }));
   $('notify').addEventListener('change', () => savePrefs({ notify: $('notify').checked }));
-  $('shareContact').addEventListener('click', e => {
-    const b = e.target.closest('button[data-share]');
-    if (b) savePrefs({ share_contact: b.dataset.v === '1' });
-  });
 
   // ---------- Calendar ----------
   function render() {
@@ -491,7 +483,7 @@
     // A 1-hour box from the half hour clicked; near 9pm it starts earlier so it fits.
     let startAt = Math.min(t, LAST - 60);
     if (isPast(day, startAt)) startAt = t;
-    const d = { day, start: startAt, minutes: 60, playerId, showName: prefs.show_name, share: prefs.share_contact };
+    const d = { day, start: startAt, minutes: 60, playerId, showName: true, share: true };  // both on unless the member changes them for this time
     const fits = LENGTHS.filter(m => lengthOk(d, m));
     if (!fits.length) {
       draft = null;
