@@ -348,6 +348,19 @@ window.STA = (function () {
     return rows.map(r => r.map(x => x.trim())).filter(r => r.some(x => x));
   }
 
+  // Saves rows of cells as a CSV file (opens in Excel, Numbers or Google Sheets).
+  function downloadCsv(filename, rows) {
+    const cell = v => { const s = v == null ? '' : String(v); return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; };
+    const blob = new Blob(['\uFEFF' + rows.map(r => r.map(cell).join(',')).join('\r\n')], { type: 'text/csv;charset=utf-8' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  }
+
   // WCAG contrast ratio of white text on a background color (#rrggbb).
   function contrastWithWhite(hex) {
     const lin = c => { c /= 255; return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4; };
@@ -356,6 +369,6 @@ window.STA = (function () {
   }
 
   return { client, authLinkType, authLinkError, TZ, fmtDateTime, fmtPlayDate, esc, rpc, showMessage,
-           addPasswordToggles, parseDelimited, applyBranding, showBranding, branding: () => brand, initPage, signOut, showTestClock, splitName,
+           addPasswordToggles, parseDelimited, downloadCsv, applyBranding, showBranding, branding: () => brand, initPage, signOut, showTestClock, splitName,
            contrastWithWhite, DEFAULT_LOGO, MESSAGES, msg, msgText, messagesLoaded, messageEdits: () => messageEdits };
 })();

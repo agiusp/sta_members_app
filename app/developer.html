@@ -18,9 +18,10 @@
   .past td.balls { color: #7e3fb3; font-weight: 700; }
   .past .ball { color: #b7791f; font-weight: 700; }
   .past th.nocourts { color: #9aa0a6; font-weight: 400; }
-  .past input.cell { width: 3.2em; padding: 3px 4px; text-align: center; font-size: 13px; }
-  .past input.cell.bad { border-color: var(--red-border); background: var(--red-bg); }
-  .past input.cell.saved { border-color: var(--green-border); }
+  .past .noshow { color: var(--red-border); text-decoration: line-through; }
+  .past .noshow-tag { color: var(--red-border); font-size: 11px; font-weight: 700; margin-left: 3px; }
+  .noshow-mode .past td.filled { cursor: pointer; }
+  .noshow-mode .past td.filled:hover { outline: 2px solid var(--red-border); outline-offset: -2px; }
   .reviews td { vertical-align: top; }
   .reviews td.score { white-space: nowrap; }
 </style>
@@ -93,21 +94,35 @@
   <div data-pane-body="past" hidden>
   <section class="panel">
     <div class="panel-title">Past Play</div>
-    <p class="muted" style="margin-top:0">The court each player was on every past Sunday of the season;
-      <span class="ball">*</span> = brought the balls. <span style="color:#7e3fb3;font-weight:700">Balls</span> = times they brought them this season.
-      The Scheduler uses this table to choose ball-bringers and to spot groups who played together before,
-      so corrections here change its choices. Locked weeks are added automatically.</p>
+    <p class="muted" style="margin-top:0">The court each player was on every Sunday of the season;
+      <span class="ball">*</span> = brought the balls, <span class="noshow-tag" style="margin:0">NS</span> = no-show.
+      <span style="color:#7e3fb3;font-weight:700">Balls</span> = times they brought them this season.
+      Each week is added from the Scheduler once its courts are final (locked, at 8pm Saturday), and can't be changed here.
+      The Scheduler uses this table to choose ball-bringers and to spot groups who played together before; no-shows are left out.</p>
     <div class="row" style="margin-bottom:12px">
       <label>Season <select id="pastSeason"></select></label>
       <label>Find a player <input id="pastFilter" placeholder="Name" style="width:180px"></label>
       <label class="check"><input type="checkbox" id="pastPlayedOnly"> Only players who played</label>
-      <button class="secondary" id="pastEditBtn" aria-pressed="false">Edit</button>
+      <button class="secondary" id="pastNoShowBtn" aria-pressed="false">Mark no-shows</button>
+      <button class="secondary" id="pastDownloadBtn">Download (CSV)</button>
+      <button class="secondary" id="pastUploadBtn" aria-expanded="false">Upload a past season</button>
     </div>
-    <div class="row" id="pastAddRow" style="margin-bottom:12px" hidden>
-      <label>Add an earlier Sunday <input type="date" id="pastAddDate"></label>
-      <button class="secondary" id="pastAddBtn">Add column</button>
-      <span class="muted">In a cell, type the court number (1 to 7), with * if they brought the balls (e.g. 3*). Clear the cell if they didn't play. Each change is saved right away.</span>
-    </div>
+    <div class="deadline" id="pastNoShowHint" hidden>Click a player's court on a Sunday to mark them as a no-show; click it again to undo.
+      Uploaded seasons can't be changed here: fix the file and upload it again.</div>
+    <section class="panel" id="pastUploadPanel" style="background:#fbfbfc" hidden>
+      <div class="panel-title">Upload a past season</div>
+      <p class="muted" style="margin-top:0">For seasons before the app. Use the club's Past Play sheet layout, saved as a CSV file or a
+        tab-separated .txt file: column 1 = player name, then one column per Sunday with the date as its heading
+        (e.g. 5/4, 05-04-2025 or May 4, 2025). In each cell put the court number, with * if they brought the balls (3*) and NS for a no-show (3 NS);
+        leave it empty if they didn't play. Other columns are ignored. Uploading the same season again replaces it.</p>
+      <div class="row">
+        <label>Season name <input id="upSeason" placeholder="2025" style="width:110px"></label>
+        <label>Year, for dates without one <input id="upYear" inputmode="numeric" placeholder="2025" style="width:90px"></label>
+        <label>File (.csv or .txt) <input type="file" id="upFile" accept=".csv,.tsv,.txt,text/csv,text/plain,text/tab-separated-values"></label>
+        <button id="upBtn">Upload</button>
+      </div>
+      <div id="upMsg"></div>
+    </section>
     <div id="pastMsg"></div>
     <div id="pastTable"></div>
   </section>
@@ -123,6 +138,7 @@
     <div class="row" style="margin-bottom:12px">
       <label>Sunday <select id="reviewDate"></select></label>
       <label>Find a player <input id="reviewFilter" placeholder="Name" style="width:180px"></label>
+      <button class="secondary" id="reviewDownloadBtn">Download (CSV)</button>
     </div>
     <div id="reviewsMsg"></div>
     <div class="table-wrap" id="reviewsTable"></div>
@@ -328,103 +344,185 @@
   });
 
   // ---------- Past Play ----------
-  let past = null;          // from dev_past_play
-  let pastEdit = false;
+  let past = null;          // from dev_past_play, plus rows and byCell built here
+  let noShowMode = false;
   const shortDate = ymd => { const [, m, d] = ymd.split('-'); return `${Number(m)}/${Number(d)}`; };
-  const cellKey = (date, id) => date + '|' + id;
-  const cellText = c => c ? c.court + (c.brings_balls ? '*' : '') : '';
+  const mdy = ymd => { const [y, m, d] = ymd.split('-'); return `${m}-${d}-${y}`; };  // MM-DD-YYYY
+  // A row is a player in the app (by id), or a name from an uploaded season.
+  const rowKey = (id, name) => id ? 'p' + id : 'n' + name.toLowerCase();
+  const cellKey = (date, key) => date + '|' + key;
+  const cellText = c => c ? c.court + (c.brings_balls ? '*' : '') + (c.no_show ? ' NS' : '') : '';
 
   async function loadPast(season) {
     showMessage($('pastMsg'), '');
     try {
       past = await rpc('dev_past_play', { p_season: season || null });
     } catch (err) { showMessage($('pastMsg'), err.message); return; }
-    past.byCell = new Map(past.cells.map(c => [cellKey(c.play_date, c.player_id), c]));
+    const rows = new Map(past.players.map(p => [rowKey(p.id), { key: rowKey(p.id), id: p.id, name: p.name }]));
+    past.cells.forEach(c => {
+      const k = rowKey(c.player_id, c.name);
+      if (!rows.has(k)) rows.set(k, { key: k, id: c.player_id, name: c.name });
+    });
+    past.rows = [...rows.values()].sort((a, b) => a.name.localeCompare(b.name));
+    past.byCell = new Map(past.cells.map(c => [cellKey(c.play_date, rowKey(c.player_id, c.name)), c]));
     $('pastSeason').innerHTML = past.seasons.map(n =>
       `<option ${past.season && n === past.season.name ? 'selected' : ''}>${esc(n)}</option>`).join('');
     renderPast();
   }
 
-  function renderPast() {
-    if (!past.season) { $('pastTable').innerHTML = '<p class="muted">No seasons yet.</p>'; return; }
+  // The rows shown, after the name filter and "Only players who played".
+  function pastRows() {
     const filter = $('pastFilter').value.trim().toLowerCase();
-    const playedOnly = $('pastPlayedOnly').checked;
-    const played = new Set(past.cells.map(c => c.player_id));
-    const balls = new Map();
-    past.cells.filter(c => c.brings_balls).forEach(c => balls.set(c.player_id, (balls.get(c.player_id) || 0) + 1));
-    const rows = past.players.filter(p =>
-      (!filter || p.name.toLowerCase().includes(filter)) && (!playedOnly || played.has(p.id)));
+    const played = new Set(past.cells.map(c => rowKey(c.player_id, c.name)));
+    return past.rows.filter(r => (!filter || r.name.toLowerCase().includes(filter)) &&
+                                 (!$('pastPlayedOnly').checked || played.has(r.key)));
+  }
+  const ballsFor = key => past.cells.filter(c => rowKey(c.player_id, c.name) === key && c.brings_balls && !c.no_show).length;
+
+  function renderPast() {
+    if (!past) return;
+    if (!past.season) { $('pastTable').innerHTML = '<p class="muted">No seasons yet.</p>'; return; }
+    const rows = pastRows();
     const label = { rain_expected: 'Rain-out expected: no courts', self_organized: 'Self-organized play: no courts' };
     const head = past.dates.map(d => {
       const note = d.week_mode === null ? 'Courts not locked' : label[d.week_mode];
       return `<th class="${note ? 'nocourts' : ''}" title="${esc(fmtPlayDate(d.play_date) + (note ? ': ' + note : ''))}">${esc(shortDate(d.play_date))}</th>`;
     }).join('');
-    const body = rows.map(p => `<tr><td class="name">${esc(p.name)}</td><td class="balls">${balls.get(p.id) || ''}</td>
+    const body = rows.map(r => `<tr><td class="name">${esc(r.name)}</td><td class="balls">${ballsFor(r.key) || ''}</td>
       ${past.dates.map(d => {
-        const t = cellText(past.byCell.get(cellKey(d.play_date, p.id)));
-        return pastEdit
-          ? `<td><input class="cell" value="${esc(t)}" data-date="${d.play_date}" data-player="${p.id}" aria-label="${esc(p.name)}, ${esc(fmtPlayDate(d.play_date))}"></td>`
-          : `<td>${t ? esc(t).replace('*', '<span class="ball">*</span>') : ''}</td>`;
+        const c = past.byCell.get(cellKey(d.play_date, r.key));
+        if (!c) return '<td></td>';
+        const t = esc(c.court + (c.brings_balls ? '*' : '')).replace('*', '<span class="ball">*</span>');
+        const can = !c.uploaded;
+        return `<td class="${can ? 'filled' : ''}" ${can ? `data-date="${d.play_date}" data-player="${c.player_id}"` : ''}
+          title="${esc(r.name + ', ' + fmtPlayDate(d.play_date) + (c.no_show ? ': no-show' : ''))}">${c.no_show
+            ? `<span class="noshow">${t}</span><span class="noshow-tag">NS</span>` : t}</td>`;
       }).join('')}</tr>`).join('');
-    $('pastTable').innerHTML = `<p class="muted" style="margin-top:0">${esc(past.season.name)} season &middot; ${past.dates.length} past Sunday(s) &middot; ${rows.length} player(s)</p>` +
+    const kind = past.season.uploaded ? ' (uploaded)' : '';
+    $('pastTable').innerHTML = `<p class="muted" style="margin-top:0">${esc(past.season.name)} season${kind} &middot; ${past.dates.length} Sunday(s) &middot; ${rows.length} player(s)</p>` +
       (past.dates.length
         ? `<div class="past-wrap"><table class="past"><thead><tr><th class="name">Name</th><th>Balls</th>${head}</tr></thead><tbody>${body}</tbody></table></div>`
-        : '<p class="muted">No past Sundays in this season yet.</p>');
+        : '<p class="muted">No Sundays with final courts in this season yet.</p>');
+    $('pastDownloadBtn').disabled = !past.dates.length;
   }
 
   $('pastSeason').addEventListener('change', () => loadPast($('pastSeason').value));
   $('pastFilter').addEventListener('input', renderPast);
   $('pastPlayedOnly').addEventListener('change', renderPast);
-  $('pastEditBtn').addEventListener('click', () => {
-    pastEdit = !pastEdit;
-    $('pastEditBtn').textContent = pastEdit ? 'Done editing' : 'Edit';
-    $('pastEditBtn').setAttribute('aria-pressed', String(pastEdit));
-    $('pastAddRow').hidden = !pastEdit;
-    if (past) renderPast();
+  $('pastNoShowBtn').addEventListener('click', () => {
+    noShowMode = !noShowMode;
+    $('pastNoShowBtn').textContent = noShowMode ? 'Done marking no-shows' : 'Mark no-shows';
+    $('pastNoShowBtn').setAttribute('aria-pressed', String(noShowMode));
+    $('pastNoShowHint').hidden = !noShowMode;
+    $('devContent').classList.toggle('noshow-mode', noShowMode);
   });
 
-  $('pastAddBtn').addEventListener('click', async () => {
-    const d = $('pastAddDate').value;
-    if (!d) { showMessage($('pastMsg'), 'Choose a Sunday first.'); return; }
+  // In "Mark no-shows", clicking a court marks or unmarks that player.
+  $('pastTable').addEventListener('click', async e => {
+    const td = e.target.closest('td.filled');
+    if (!noShowMode || !td) return;
+    const player = Number(td.dataset.player), date = td.dataset.date;
+    const c = past.byCell.get(cellKey(date, rowKey(player)));
+    showMessage($('pastMsg'), '');
     try {
-      await rpc('dev_add_past_date', { p_play_date: d });
-      $('pastAddDate').value = '';
-      await loadPast(past.season && past.season.name);
-      showMessage($('pastMsg'), `${fmtPlayDate(d)} added.`, 'ok');
+      await rpc('dev_set_no_show', { p_play_date: date, p_player_id: player, p_no_show: !c.no_show });
+      c.no_show = !c.no_show;
+      renderPast();
+      showMessage($('pastMsg'), `${c.name} is ${c.no_show ? 'now marked as a no-show' : 'no longer marked as a no-show'} on ${fmtPlayDate(date)}.`, 'ok');
     } catch (err) { showMessage($('pastMsg'), err.message); }
   });
 
-  // Saves a cell as soon as it changes: "3", "3*" or empty.
-  $('pastTable').addEventListener('change', async e => {
-    const input = e.target.closest('input.cell');
-    if (!input) return;
-    const date = input.dataset.date, player = Number(input.dataset.player);
-    const key = cellKey(date, player);
-    const text = input.value.replace(/\s+/g, '');
-    const m = text.match(/^([1-7])(\*?)$/);
-    input.classList.remove('saved');
-    if (text && !m) {
-      input.classList.add('bad');
-      showMessage($('pastMsg'), `"${input.value}" isn't a court: type 1 to 7, with * if they brought the balls (e.g. 3*), or leave it empty.`);
+  // The table as shown, in the sheet's layout (it can be uploaded again).
+  $('pastDownloadBtn').addEventListener('click', () => {
+    const rows = pastRows();
+    STA.downloadCsv(`Past Play ${past.season.name}.csv`, [
+      ['Name', 'Balls', ...past.dates.map(d => mdy(d.play_date))],
+      ...rows.map(r => [r.name, ballsFor(r.key) || '',
+        ...past.dates.map(d => cellText(past.byCell.get(cellKey(d.play_date, r.key))))])
+    ]);
+  });
+
+  // ---------- Upload a past season ----------
+  $('pastUploadBtn').addEventListener('click', () => {
+    const open = $('pastUploadPanel').hidden;
+    $('pastUploadPanel').hidden = !open;
+    $('pastUploadBtn').setAttribute('aria-expanded', String(open));
+  });
+  $('upSeason').addEventListener('input', () => {
+    if (/^\d{4}$/.test($('upSeason').value.trim()) && !$('upYear').dataset.touched) $('upYear').value = $('upSeason').value.trim();
+  });
+  $('upYear').addEventListener('input', () => { $('upYear').dataset.touched = '1'; });
+
+  const MONTHS = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
+  // A column heading as 'YYYY-MM-DD', or null if it isn't a date.
+  function headingDate(h, year) {
+    let y, m, d, x;
+    h = h.trim();
+    if ((x = h.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/))) [, y, m, d] = x;
+    else if ((x = h.match(/^(\d{1,2})[\/-](\d{1,2})(?:[\/-](\d{2}|\d{4}))?$/))) [, m, d, y] = x;
+    else if ((x = h.match(/^([A-Za-z]{3})[a-z]*\.?\s+(\d{1,2})(?:,?\s+(\d{4}))?$/))) {
+      m = MONTHS.indexOf(x[1].toLowerCase()) + 1; d = x[2]; y = x[3];
+      if (!m) return null;
+    } else return null;
+    y = y ? (String(y).length === 2 ? 2000 + Number(y) : Number(y)) : year;
+    if (!y) return undefined;  // a date, but no year
+    const dt = new Date(Date.UTC(Number(y), Number(m) - 1, Number(d)));
+    if (dt.getUTCMonth() !== Number(m) - 1) return null;
+    return dt.toISOString().slice(0, 10);
+  }
+
+  // Reads the sheet into rows for dev_upload_past_season, or a list of problems.
+  function readSeason(text, year) {
+    const table = STA.parseDelimited(text);
+    if (table.length < 2) return { problems: ['The file needs a heading row and at least one player.'] };
+    const cols = [], problems = [];
+    table[0].forEach((h, i) => {
+      if (i === 0) return;
+      const date = headingDate(h, year);
+      if (date === undefined) problems.push(`Column "${h}" has no year: fill in "Year, for dates without one".`);
+      else if (date && new Date(date + 'T12:00:00Z').getUTCDay() !== 0) problems.push(`Column "${h}" (${mdy(date)}) isn't a Sunday. Check the year.`);
+      else if (date) cols.push([i, date]);
+    });
+    if (!cols.length && !problems.length) problems.push('No column headings are dates (e.g. 5/4, 05-04-2025 or May 4, 2025).');
+    const rows = [];
+    table.slice(1).forEach(r => {
+      const name = (r[0] || '').replace(/\s+/g, ' ').trim();
+      if (!name) return;
+      cols.forEach(([i, date]) => {
+        const v = (r[i] || '').trim();
+        if (!v) return;
+        const m = v.match(/^([1-7])\s*(\*?)\s*(ns|no-?show)?$/i);
+        if (!m) { problems.push(`${name}, ${mdy(date)}: "${v}" isn't a court (1 to 7, with * and/or NS).`); return; }
+        rows.push({ name, play_date: date, court: Number(m[1]), brings_balls: !!m[2], no_show: !!m[3] });
+      });
+    });
+    if (!rows.length && !problems.length) problems.push('No player has a court in any date column.');
+    return { rows, problems };
+  }
+
+  $('upBtn').addEventListener('click', async () => {
+    showMessage($('upMsg'), '');
+    const season = $('upSeason').value.trim();
+    const file = $('upFile').files[0];
+    if (!season) { showMessage($('upMsg'), 'Give the season a name, e.g. 2025.'); return; }
+    if (!file) { showMessage($('upMsg'), 'Choose the file first.'); return; }
+    if (/\.xlsx?$/i.test(file.name)) { showMessage($('upMsg'), 'Please save the spreadsheet as a CSV or tab-separated text file first, then upload that.'); return; }
+    const { rows, problems } = readSeason(await file.text(), Number($('upYear').value) || null);
+    if (problems.length) {
+      showMessage($('upMsg'), `Nothing was uploaded. Please fix: ${problems.slice(0, 8).join(' ')}${problems.length > 8 ? ` And ${problems.length - 8} more.` : ''}`);
       return;
     }
-    input.classList.remove('bad');
-    showMessage($('pastMsg'), '');
+    const names = new Set(rows.map(r => r.name.toLowerCase())).size;
+    const dates = [...new Set(rows.map(r => r.play_date))].sort();
+    if (!confirm(`Upload the ${season} season: ${names} players over ${dates.length} Sundays (${mdy(dates[0])} to ${mdy(dates[dates.length - 1])})? This replaces any earlier upload of ${season}.`)) return;
     try {
-      await rpc('dev_save_past_play', { p_play_date: date, p_player_id: player,
-        p_court: m ? Number(m[1]) : null, p_brings_balls: !!(m && m[2]) });
-      past.cells = past.cells.filter(c => cellKey(c.play_date, c.player_id) !== key);
-      if (m) past.cells.push({ play_date: date, player_id: player, court: Number(m[1]), brings_balls: !!m[2] });
-      past.byCell = new Map(past.cells.map(c => [cellKey(c.play_date, c.player_id), c]));
-      input.value = text;
-      input.classList.add('saved');
-      // Update that row's Balls count without redrawing the inputs.
-      const n = past.cells.filter(c => c.player_id === player && c.brings_balls).length;
-      input.closest('tr').querySelector('td.balls').textContent = n || '';
-    } catch (err) {
-      input.value = cellText(past.byCell.get(key));
-      showMessage($('pastMsg'), err.message);
-    }
+      const res = await rpc('dev_upload_past_season', { p_season: season, p_rows: rows });
+      $('upFile').value = '';
+      await loadPast(season);
+      showMessage($('upMsg'), `Uploaded ${res.rows} court entries for ${season}.` + (res.unmatched.length
+        ? ` ${res.unmatched.length} name(s) don't match a player in the app, so they're in the table but not used by the Scheduler: ${res.unmatched.join(', ')}.`
+        : ' Every name matches a player in the app.'), 'ok');
+    } catch (err) { showMessage($('upMsg'), err.message); }
   });
 
   // ---------- Player Reviews ----------
@@ -459,28 +557,33 @@
     return [...groups].map(([k, nums]) => `${k} (set${nums.length > 1 ? 's' : ''} ${nums.join(', ')})`).join('; ');
   }
 
-  function renderReviews() {
+  // The reviews shown, after the Sunday and name filters.
+  function reviewRows() {
     const date = $('reviewDate').value;
     const filter = $('reviewFilter').value.trim().toLowerCase();
-    const rows = reviews.reviews.filter(r =>
+    return reviews.reviews.filter(r =>
       (!date || r.play_date === date) && (!filter || nameLevel(r.player_id).toLowerCase().includes(filter)));
+  }
+  const partnerOf = r => bySet(r.sets, s => {
+    const others = s.team1.filter(id => id !== r.player_id);
+    return others.length ? others.map(nameLevel).join(', ') : 'None (singles)';
+  });
+  const opponentsOf = r => bySet(r.sets, s => s.team2.map(nameLevel).join(', '));
+  const setScore = (r, i) => r.sets[i] ? `${r.sets[i].team1_games}-${r.sets[i].team2_games}` : 'N/A';
+  // A Set 5 column only appears when someone played five sets.
+  const setColumns = rows => Math.max(4, ...rows.map(r => r.sets.length));
+
+  function renderReviews() {
+    const rows = reviewRows();
     if (!rows.length) {
       $('reviewsTable').innerHTML = `<p class="muted">${reviews.reviews.length ? 'No reviews match.' : 'No Game Reviews yet.'}</p>`;
       return;
     }
-    // A Set 5 column only appears when someone played five sets.
-    const setCols = Math.max(4, ...rows.map(r => r.sets.length));
+    const setCols = setColumns(rows);
     const body = rows.map(r => {
-      const partner = bySet(r.sets, s => {
-        const others = s.team1.filter(id => id !== r.player_id);
-        return others.length ? others.map(nameLevel).join(', ') : 'None (singles)';
-      });
-      const opponents = bySet(r.sets, s => s.team2.map(nameLevel).join(', '));
-      const scores = Array.from({ length: setCols }, (_, i) => {
-        const s = r.sets[i];
-        return `<td class="score">${s ? `${s.team1_games}-${s.team2_games}` : 'N/A'}</td>`;
-      }).join('');
-      return `<tr><td>${esc(nameLevel(r.player_id))}</td><td>${esc(fmtPlayDate(r.play_date))}</td>
+      const partner = partnerOf(r), opponents = opponentsOf(r);
+      const scores = Array.from({ length: setCols }, (_, i) => `<td class="score">${setScore(r, i)}</td>`).join('');
+      return `<tr><td>${esc(nameLevel(r.player_id))}</td><td>${esc(mdy(r.play_date))}</td>
         <td>${esc(partner)}</td><td>${esc(opponents)}</td><td>${r.enjoyment}</td>${scores}</tr>`;
     }).join('');
     $('reviewsTable').innerHTML = `<p class="muted" style="margin-top:0">${rows.length} review(s). Game Rating: 1 = did not enjoy, 5 = enjoyed it very much.</p>
@@ -489,6 +592,15 @@
   }
 
   $('reviewDate').addEventListener('change', renderReviews);
+  $('reviewDownloadBtn').addEventListener('click', () => {
+    const rows = reviewRows();
+    const setCols = setColumns(rows);
+    STA.downloadCsv('Player Reviews.csv', [
+      ['Name', 'Date', 'Partner', 'Opponents', 'Game Rating', ...Array.from({ length: setCols }, (_, i) => `Set ${i + 1}`)],
+      ...rows.map(r => [nameLevel(r.player_id), mdy(r.play_date), partnerOf(r), opponentsOf(r), r.enjoyment,
+                        ...Array.from({ length: setCols }, (_, i) => setScore(r, i))])
+    ]);
+  });
   $('reviewFilter').addEventListener('input', renderReviews);
 
   start().catch(err => showMessage($('guardMsg'), err.message));
