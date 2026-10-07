@@ -7,6 +7,22 @@
 <link rel="stylesheet" href="styles.css">
 <style>
   body { --page-width: 1180px; }
+  /* Past Play: like the club's sheet, one row per player, one column per Sunday. */
+  .past-wrap { overflow: auto; max-height: 75vh; border: 1px solid #e2e2e2; border-radius: 6px; }
+  .past { width: auto; min-width: 100%; }
+  .past th, .past td { text-align: center; padding: 5px 6px; white-space: nowrap; border-left: 1px solid #eceef1; }
+  .past thead th { position: sticky; top: 0; background: #fff; z-index: 2; border-bottom: 1px solid #d9dadc; }
+  .past th.name, .past td.name { position: sticky; left: 0; background: #fff; text-align: left; z-index: 1; border-left: none; }
+  .past thead th.name { z-index: 3; }
+  .past tbody tr:hover td { background: #f7f6fb; }
+  .past td.balls { color: #7e3fb3; font-weight: 700; }
+  .past .ball { color: #b7791f; font-weight: 700; }
+  .past th.nocourts { color: #9aa0a6; font-weight: 400; }
+  .past input.cell { width: 3.2em; padding: 3px 4px; text-align: center; font-size: 13px; }
+  .past input.cell.bad { border-color: var(--red-border); background: var(--red-bg); }
+  .past input.cell.saved { border-color: var(--green-border); }
+  .reviews td { vertical-align: top; }
+  .reviews td.score { white-space: nowrap; }
 </style>
 </head>
 <body data-page="Sunday Program" data-section="dev" data-tab="sunday">
@@ -15,6 +31,13 @@
 <div id="guardMsg"></div>
 
 <div id="devContent" hidden>
+  <div class="seg" id="paneTabs" role="tablist">
+    <button data-pane="week">This week</button>
+    <button data-pane="past">Past Play</button>
+    <button data-pane="reviews">Player Reviews</button>
+  </div>
+
+  <div data-pane-body="week">
   <section class="panel" id="clockPanel" hidden>
     <div class="panel-title">Test clock (local testing only)</div>
     <p class="muted">The app is pretending it's <strong id="clockNow"></strong>. Deadlines, sign-up order and the sign-up page all follow this clock.</p>
@@ -64,6 +87,47 @@
     </div>
     <div id="contactsMsg"></div>
   </section>
+  </div>
+
+  <!-- Past Play: who played on which court each Sunday, and who brought the balls. -->
+  <div data-pane-body="past" hidden>
+  <section class="panel">
+    <div class="panel-title">Past Play</div>
+    <p class="muted" style="margin-top:0">The court each player was on every past Sunday of the season;
+      <span class="ball">*</span> = brought the balls. <span style="color:#7e3fb3;font-weight:700">Balls</span> = times they brought them this season.
+      The Scheduler uses this table to choose ball-bringers and to spot groups who played together before,
+      so corrections here change its choices. Locked weeks are added automatically.</p>
+    <div class="row" style="margin-bottom:12px">
+      <label>Season <select id="pastSeason"></select></label>
+      <label>Find a player <input id="pastFilter" placeholder="Name" style="width:180px"></label>
+      <label class="check"><input type="checkbox" id="pastPlayedOnly"> Only players who played</label>
+      <button class="secondary" id="pastEditBtn" aria-pressed="false">Edit</button>
+    </div>
+    <div class="row" id="pastAddRow" style="margin-bottom:12px" hidden>
+      <label>Add an earlier Sunday <input type="date" id="pastAddDate"></label>
+      <button class="secondary" id="pastAddBtn">Add column</button>
+      <span class="muted">In a cell, type the court number (1 to 7), with * if they brought the balls (e.g. 3*). Clear the cell if they didn't play. Each change is saved right away.</span>
+    </div>
+    <div id="pastMsg"></div>
+    <div id="pastTable"></div>
+  </section>
+  </div>
+
+  <!-- Player Reviews: every Game Review, for developers only. -->
+  <div data-pane-body="reviews" hidden>
+  <section class="panel">
+    <div class="panel-title">Player Reviews</div>
+    <p class="muted" style="margin-top:0">Every Game Review players have sent in. Only developers see this table.
+      Set scores start with the player's own team (3-6 = the player and their partner won 3 games, their opponents 6).
+      Levels are each player's current play level.</p>
+    <div class="row" style="margin-bottom:12px">
+      <label>Sunday <select id="reviewDate"></select></label>
+      <label>Find a player <input id="reviewFilter" placeholder="Name" style="width:180px"></label>
+    </div>
+    <div id="reviewsMsg"></div>
+    <div class="table-wrap" id="reviewsTable"></div>
+  </section>
+  </div>
 
 </div>
 </main>
@@ -86,8 +150,32 @@
       return;
     }
     $('devContent').hidden = false;
-    await loadWeek();
+    const pane = location.hash.slice(1);
+    await showPane(['past', 'reviews'].includes(pane) ? pane : 'week');
   }
+
+  // ---------- Tabs: This week, Past Play, Player Reviews ----------
+  const loaded = {};
+  async function showPane(pane) {
+    document.querySelectorAll('[data-pane]').forEach(b => {
+      b.classList.toggle('active', b.dataset.pane === pane);
+      b.setAttribute('aria-selected', String(b.dataset.pane === pane));
+    });
+    document.querySelectorAll('[data-pane-body]').forEach(d => { d.hidden = d.dataset.paneBody !== pane; });
+    history.replaceState(null, '', pane === 'week' ? location.pathname : '#' + pane);
+    // Past Play and Player Reviews load the first time they're opened (and
+    // again after the test clock moves); This week every time.
+    if (pane === 'week') await loadWeek();
+    else if (!loaded[pane]) {
+      loaded[pane] = true;
+      if (pane === 'past') await loadPast();
+      else await loadReviews();
+    }
+  }
+  $('paneTabs').addEventListener('click', e => {
+    const b = e.target.closest('[data-pane]');
+    if (b) showPane(b.dataset.pane).catch(err => showMessage($('guardMsg'), err.message));
+  });
 
   // ---------- Test clock and this week ----------
   async function loadWeek() {
@@ -208,6 +296,7 @@
     showMessage($('clockMsg'), '');
     try { await rpc('dev_set_test_clock', { p_clock: iso }); }
     catch (err) { showMessage($('clockMsg'), err.message); }
+    loaded.past = loaded.reviews = false;  // which Sundays are past depends on the clock
     await loadWeek();
   }
 
@@ -237,6 +326,170 @@
     catch (err) { showMessage($('weekMsg'), err.message); }
     await loadWeek();
   });
+
+  // ---------- Past Play ----------
+  let past = null;          // from dev_past_play
+  let pastEdit = false;
+  const shortDate = ymd => { const [, m, d] = ymd.split('-'); return `${Number(m)}/${Number(d)}`; };
+  const cellKey = (date, id) => date + '|' + id;
+  const cellText = c => c ? c.court + (c.brings_balls ? '*' : '') : '';
+
+  async function loadPast(season) {
+    showMessage($('pastMsg'), '');
+    try {
+      past = await rpc('dev_past_play', { p_season: season || null });
+    } catch (err) { showMessage($('pastMsg'), err.message); return; }
+    past.byCell = new Map(past.cells.map(c => [cellKey(c.play_date, c.player_id), c]));
+    $('pastSeason').innerHTML = past.seasons.map(n =>
+      `<option ${past.season && n === past.season.name ? 'selected' : ''}>${esc(n)}</option>`).join('');
+    renderPast();
+  }
+
+  function renderPast() {
+    if (!past.season) { $('pastTable').innerHTML = '<p class="muted">No seasons yet.</p>'; return; }
+    const filter = $('pastFilter').value.trim().toLowerCase();
+    const playedOnly = $('pastPlayedOnly').checked;
+    const played = new Set(past.cells.map(c => c.player_id));
+    const balls = new Map();
+    past.cells.filter(c => c.brings_balls).forEach(c => balls.set(c.player_id, (balls.get(c.player_id) || 0) + 1));
+    const rows = past.players.filter(p =>
+      (!filter || p.name.toLowerCase().includes(filter)) && (!playedOnly || played.has(p.id)));
+    const label = { rain_expected: 'Rain-out expected: no courts', self_organized: 'Self-organized play: no courts' };
+    const head = past.dates.map(d => {
+      const note = d.week_mode === null ? 'Courts not locked' : label[d.week_mode];
+      return `<th class="${note ? 'nocourts' : ''}" title="${esc(fmtPlayDate(d.play_date) + (note ? ': ' + note : ''))}">${esc(shortDate(d.play_date))}</th>`;
+    }).join('');
+    const body = rows.map(p => `<tr><td class="name">${esc(p.name)}</td><td class="balls">${balls.get(p.id) || ''}</td>
+      ${past.dates.map(d => {
+        const t = cellText(past.byCell.get(cellKey(d.play_date, p.id)));
+        return pastEdit
+          ? `<td><input class="cell" value="${esc(t)}" data-date="${d.play_date}" data-player="${p.id}" aria-label="${esc(p.name)}, ${esc(fmtPlayDate(d.play_date))}"></td>`
+          : `<td>${t ? esc(t).replace('*', '<span class="ball">*</span>') : ''}</td>`;
+      }).join('')}</tr>`).join('');
+    $('pastTable').innerHTML = `<p class="muted" style="margin-top:0">${esc(past.season.name)} season &middot; ${past.dates.length} past Sunday(s) &middot; ${rows.length} player(s)</p>` +
+      (past.dates.length
+        ? `<div class="past-wrap"><table class="past"><thead><tr><th class="name">Name</th><th>Balls</th>${head}</tr></thead><tbody>${body}</tbody></table></div>`
+        : '<p class="muted">No past Sundays in this season yet.</p>');
+  }
+
+  $('pastSeason').addEventListener('change', () => loadPast($('pastSeason').value));
+  $('pastFilter').addEventListener('input', renderPast);
+  $('pastPlayedOnly').addEventListener('change', renderPast);
+  $('pastEditBtn').addEventListener('click', () => {
+    pastEdit = !pastEdit;
+    $('pastEditBtn').textContent = pastEdit ? 'Done editing' : 'Edit';
+    $('pastEditBtn').setAttribute('aria-pressed', String(pastEdit));
+    $('pastAddRow').hidden = !pastEdit;
+    if (past) renderPast();
+  });
+
+  $('pastAddBtn').addEventListener('click', async () => {
+    const d = $('pastAddDate').value;
+    if (!d) { showMessage($('pastMsg'), 'Choose a Sunday first.'); return; }
+    try {
+      await rpc('dev_add_past_date', { p_play_date: d });
+      $('pastAddDate').value = '';
+      await loadPast(past.season && past.season.name);
+      showMessage($('pastMsg'), `${fmtPlayDate(d)} added.`, 'ok');
+    } catch (err) { showMessage($('pastMsg'), err.message); }
+  });
+
+  // Saves a cell as soon as it changes: "3", "3*" or empty.
+  $('pastTable').addEventListener('change', async e => {
+    const input = e.target.closest('input.cell');
+    if (!input) return;
+    const date = input.dataset.date, player = Number(input.dataset.player);
+    const key = cellKey(date, player);
+    const text = input.value.replace(/\s+/g, '');
+    const m = text.match(/^([1-7])(\*?)$/);
+    input.classList.remove('saved');
+    if (text && !m) {
+      input.classList.add('bad');
+      showMessage($('pastMsg'), `"${input.value}" isn't a court: type 1 to 7, with * if they brought the balls (e.g. 3*), or leave it empty.`);
+      return;
+    }
+    input.classList.remove('bad');
+    showMessage($('pastMsg'), '');
+    try {
+      await rpc('dev_save_past_play', { p_play_date: date, p_player_id: player,
+        p_court: m ? Number(m[1]) : null, p_brings_balls: !!(m && m[2]) });
+      past.cells = past.cells.filter(c => cellKey(c.play_date, c.player_id) !== key);
+      if (m) past.cells.push({ play_date: date, player_id: player, court: Number(m[1]), brings_balls: !!m[2] });
+      past.byCell = new Map(past.cells.map(c => [cellKey(c.play_date, c.player_id), c]));
+      input.value = text;
+      input.classList.add('saved');
+      // Update that row's Balls count without redrawing the inputs.
+      const n = past.cells.filter(c => c.player_id === player && c.brings_balls).length;
+      input.closest('tr').querySelector('td.balls').textContent = n || '';
+    } catch (err) {
+      input.value = cellText(past.byCell.get(key));
+      showMessage($('pastMsg'), err.message);
+    }
+  });
+
+  // ---------- Player Reviews ----------
+  let reviews = null;       // from dev_player_reviews
+
+  async function loadReviews() {
+    showMessage($('reviewsMsg'), '');
+    try { reviews = await rpc('dev_player_reviews'); }
+    catch (err) { showMessage($('reviewsMsg'), err.message); return; }
+    const dates = [...new Set(reviews.reviews.map(r => r.play_date))];
+    $('reviewDate').innerHTML = '<option value="">All Sundays</option>' +
+      dates.map(d => `<option value="${d}">${esc(fmtPlayDate(d))}</option>`).join('');
+    renderReviews();
+  }
+
+  // "Peter Smith - 3.5"
+  function nameLevel(id) {
+    const p = reviews.players[id];
+    return p ? `${p.name} - ${p.level || '?'}` : 'Unknown player';
+  }
+
+  // The partner (or opponents) in each set. If they changed between sets,
+  // each is listed with the sets they played.
+  function bySet(sets, pick) {
+    const groups = new Map();
+    sets.forEach(s => {
+      const k = pick(s);
+      if (!groups.has(k)) groups.set(k, []);
+      groups.get(k).push(s.set_number);
+    });
+    if (groups.size <= 1) return [...groups.keys()][0] || '';
+    return [...groups].map(([k, nums]) => `${k} (set${nums.length > 1 ? 's' : ''} ${nums.join(', ')})`).join('; ');
+  }
+
+  function renderReviews() {
+    const date = $('reviewDate').value;
+    const filter = $('reviewFilter').value.trim().toLowerCase();
+    const rows = reviews.reviews.filter(r =>
+      (!date || r.play_date === date) && (!filter || nameLevel(r.player_id).toLowerCase().includes(filter)));
+    if (!rows.length) {
+      $('reviewsTable').innerHTML = `<p class="muted">${reviews.reviews.length ? 'No reviews match.' : 'No Game Reviews yet.'}</p>`;
+      return;
+    }
+    // A Set 5 column only appears when someone played five sets.
+    const setCols = Math.max(4, ...rows.map(r => r.sets.length));
+    const body = rows.map(r => {
+      const partner = bySet(r.sets, s => {
+        const others = s.team1.filter(id => id !== r.player_id);
+        return others.length ? others.map(nameLevel).join(', ') : 'None (singles)';
+      });
+      const opponents = bySet(r.sets, s => s.team2.map(nameLevel).join(', '));
+      const scores = Array.from({ length: setCols }, (_, i) => {
+        const s = r.sets[i];
+        return `<td class="score">${s ? `${s.team1_games}-${s.team2_games}` : 'N/A'}</td>`;
+      }).join('');
+      return `<tr><td>${esc(nameLevel(r.player_id))}</td><td>${esc(fmtPlayDate(r.play_date))}</td>
+        <td>${esc(partner)}</td><td>${esc(opponents)}</td><td>${r.enjoyment}</td>${scores}</tr>`;
+    }).join('');
+    $('reviewsTable').innerHTML = `<p class="muted" style="margin-top:0">${rows.length} review(s). Game Rating: 1 = did not enjoy, 5 = enjoyed it very much.</p>
+      <table class="reviews"><tr><th>Name</th><th>Date</th><th>Partner</th><th>Opponents</th><th>Game Rating</th>
+      ${Array.from({ length: setCols }, (_, i) => `<th>Set ${i + 1}</th>`).join('')}</tr>${body}</table>`;
+  }
+
+  $('reviewDate').addEventListener('change', renderReviews);
+  $('reviewFilter').addEventListener('input', renderReviews);
 
   start().catch(err => showMessage($('guardMsg'), err.message));
 })();

@@ -51,11 +51,11 @@
   .chip.selected { border-color: var(--accent); background: #eaf2fb; box-shadow: 0 0 0 2px var(--accent); }
   .chip .tag { font-size: 11px; font-weight: 700; color: #6b4511; }
   .ball-mark { font-weight: 700; color: #b7791f; }
-  /* Modify bring-ball assignments: one star per time this season; red = last
-     Sunday played, pink = the Sunday before. */
-  .stars { font-size: 13px; letter-spacing: 1px; color: #b7791f; white-space: nowrap; }
-  .stars .last { color: #d62828; }
-  .stars .prev { color: #f06ba8; }
+  /* From Past Play: (times they brought balls this season), with a red star if
+     they brought them the last Sunday played and a pink one for the Sunday before. */
+  .balls-count { font-size: 12px; font-weight: 600; color: #7e3fb3; white-space: nowrap; }
+  .star-last { color: #d62828; }
+  .star-prev { color: #f06ba8; }
   .chip.bringer { border-color: #b7791f; background: #fff8dc; box-shadow: 0 0 0 2px #e3c35a; }
   .chip .ball-tag { font-size: 11px; font-weight: 700; color: #7a5a00; background: #fde68a; border-radius: 10px; padding: 1px 7px; }
   .ball-mode .court .chip { cursor: pointer; }
@@ -180,7 +180,11 @@
     <div class="legend-item"><span class="swatch green"></span> Exactly 4 players who fit the Organized Play format</div>
     <div class="legend-item"><span class="swatch red"></span> Doesn't fit the format, or not exactly 4 players</div>
     <div class="legend-item sunday-only"><span class="swatch blue"></span> These 4 played together on an earlier Sunday (hover for dates)</div>
-    <div class="legend-item"><strong class="ball-mark">*</strong> <span id="ballLegend">Brings a fresh can of balls (chosen automatically: longest since last bringing them; change it with Modify bring-ball assignments)</span></div>
+    <div class="legend-item"><strong class="ball-mark">*</strong> <span id="ballLegend">Brings a fresh can of balls this week</span></div>
+    <div class="legend-item sunday-only"><span class="balls-count">(2)</span> Times they brought balls this season (from Past Play)</div>
+    <div class="legend-item sunday-only"><span class="balls-count">(2<span class="star-last">★</span>)</span> Brought balls the last Sunday played</div>
+    <div class="legend-item sunday-only"><span class="balls-count">(2<span class="star-prev">★</span>)</span> Brought balls the Sunday before that</div>
+    <div class="legend-item sunday-only"><span class="balls-count">(2<span class="star-last">★</span><span class="star-prev">★</span>)</span> Brought balls both of the last two Sundays</div>
     <div class="legend-item"><span class="swatch amber"></span> <span id="extraLegend">On the waitlist</span></div>
   </div>
   <p class="muted sunday-only">Tap one player, then another, to swap them; or tap a player, then an empty spot, to move them.
@@ -343,19 +347,14 @@
     return { numDates: dates.length, balls, configs, seasonBalls, lastDate, prevDate };
   }
 
-  // One star per time this season; the first red if they brought balls the
-  // last Sunday played, the next pink if they brought them the Sunday before.
-  function starsHtml(id) {
-    const b = history.seasonBalls.get(id);
-    if (!b) return '<span class="stars" title="Hasn\'t brought balls this season"></span>';
-    const stars = [];
-    if (b.last) stars.push('<span class="last">★</span>');
-    if (b.prev) stars.push('<span class="prev">★</span>');
-    while (stars.length < b.count) stars.push('★');
-    const when = [b.last && `last Sunday played (${fmtPlayDate(history.lastDate)})`,
+  // "(2)": times they brought balls this season, from Past Play; a red star
+  // if they brought them the last Sunday played, a pink one for the Sunday before.
+  function ballCountHtml(id) {
+    const b = history.seasonBalls.get(id) || { count: 0, last: false, prev: false };
+    const when = [b.last && `the last Sunday played (${fmtPlayDate(history.lastDate)})`,
                   b.prev && `the Sunday before (${fmtPlayDate(history.prevDate)})`].filter(Boolean).join(' and ');
     const title = `Brought balls ${b.count} time${b.count === 1 ? '' : 's'} this season${when ? `, including ${when}` : ''}`;
-    return `<span class="stars" title="${esc(title)}" aria-label="${esc(title)}">${stars.join('')}</span>`;
+    return `<span class="balls-count" title="${esc(title)}" aria-label="${esc(title)}">(${b.count}${b.last ? '<span class="star-last">★</span>' : ''}${b.prev ? '<span class="star-prev">★</span>' : ''})</span>`;
   }
 
   const weeksSinceBalls = id => {
@@ -364,12 +363,17 @@
   };
   const cmp = (a, b) => (a < b ? -1 : a > b ? 1 : 0);
 
-  // Whoever has gone longest since last bringing balls; then fewest times
+  // The fairest ball-bringer on a court, from Past Play: avoid whoever brought
+  // them the last Sunday played, then the Sunday before; then fewest times this
+  // season; then longest since they last brought them; then fewest times
   // overall; then earliest sign-up.
   function pickBallBringer(ids) {
     if (!ids.length) return null;
+    const season = id => history.seasonBalls.get(id) || { count: 0, last: false, prev: false };
+    const recent = id => (season(id).last ? 2 : 0) + (season(id).prev ? 1 : 0);
     const count = id => (history.balls.get(id) || { count: 0 }).count;
     return [...ids].sort((a, b) =>
+      cmp(recent(a), recent(b)) || cmp(season(a).count, season(b).count) ||
       cmp(weeksSinceBalls(b), weeksSinceBalls(a)) || cmp(count(a), count(b)) ||
       cmp(byId.get(a).place, byId.get(b).place))[0];
   }
@@ -521,7 +525,7 @@
     const tag = !p.has_spot ? `<span class="tag">${source === 'upload' ? 'Extra' : `Waitlist #${p.waitlist_place}`}</span>` : '';
     return `<div class="${cls.join(' ')}" data-id="${id}" data-from="${from}"${title}>
       <span>${esc(p.first_name)} ${esc(p.last_name)}${isBringer && !ballMode ? '<span class="ball-mark">*</span>' : ''},</span>
-      ${esc(p.sex || '?')}, ${esc(p.level || '?')} ${ballMode ? starsHtml(id) : ''}
+      ${esc(p.sex || '?')}, ${esc(p.level || '?')} ${source === 'sunday' ? ballCountHtml(id) : ''}
       ${ballMode && isBringer ? '<span class="ball-tag">Brings balls</span>' : ''} ${tag}</div>`;
   }
 
@@ -541,7 +545,7 @@
     $('benchTitle').textContent = upload ? 'Bench: not on a court' : 'Bench: signed up, not on a court';
     $('ballLegend').textContent = upload
       ? 'Brings a fresh can of balls (picked at random; change it with Modify bring-ball assignments)'
-      : 'Brings a fresh can of balls (chosen automatically: longest since last bringing them; change it with Modify bring-ball assignments)';
+      : 'Brings a fresh can of balls this week (chosen automatically from Past Play: not whoever brought them the last two Sundays if possible, then fewest times this season; change it with Modify bring-ball assignments)';
     $('extraLegend').textContent = upload ? 'More players than courts: waiting on the bench' : 'On the waitlist';
     if (upload) {
       const most = Math.max(1, Math.ceil(data.lineup.length / COURT_SIZE));
@@ -637,9 +641,9 @@
       hint.innerHTML = upload ? `<span>Tap a player on a court to make them that court's ball-bringer.</span>
         <span class="row" style="gap:8px"><button class="secondary" id="ballAutoBtn">Pick again at random</button>
         <button id="ballDoneBtn">Done</button></span>` : `<span>Tap a player on a court to make them that court's ball-bringer.
-        <span class="stars">★</span> = times they brought balls this season${history.lastDate ? `;
-        <span class="stars"><span class="last">★</span></span> = brought them the last Sunday played (${esc(fmtPlayDate(history.lastDate))})` : ''}${history.prevDate ? `;
-        <span class="stars"><span class="prev">★</span></span> = the Sunday before (${esc(fmtPlayDate(history.prevDate))})` : ''}.</span>
+        <span class="balls-count">(2)</span> = times they brought balls this season${history.lastDate ? `;
+        <span class="balls-count star-last">★</span> = brought them the last Sunday played (${esc(fmtPlayDate(history.lastDate))})` : ''}${history.prevDate ? `;
+        <span class="balls-count star-prev">★</span> = the Sunday before (${esc(fmtPlayDate(history.prevDate))})` : ''}.</span>
         <span class="row" style="gap:8px"><button class="secondary" id="ballAutoBtn">Back to automatic</button>
         <button id="ballDoneBtn">Done</button></span>`;
       $('ballAutoBtn').addEventListener('click', () => { chosenBringer = []; render(); });

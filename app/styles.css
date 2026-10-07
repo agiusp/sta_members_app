@@ -143,6 +143,12 @@ a.link-button { font-size: 13px; color: var(--accent); cursor: pointer; }
 .badge.spot { background: var(--green-bg); color: #1d5e30; border: 1px solid var(--green-border); }
 .badge.wait { background: var(--amber-bg); color: #6b4511; border: 1px solid var(--amber-border); }
 .badge.none { background: #f0f1f3; color: var(--muted); border: 1px solid #d5d9de; }
+/* Segmented buttons that switch between parts of a page (Settings, Sunday Program). */
+.seg { display: inline-flex; flex-wrap: wrap; border: 1px solid var(--accent); border-radius: 8px; overflow: hidden; margin-bottom: 18px; }
+.seg button { border: none; border-radius: 0; background: #fff; color: var(--accent); min-height: 38px; padding: 7px 16px; }
+.seg button + button { border-left: 1px solid var(--accent); }
+.seg button.active { background: var(--accent); color: #fff; }
+.seg.small button { min-height: 32px; padding: 5px 13px; font-size: 13px; }
 table { width: 100%; border-collapse: collapse; font-size: 13px; }
 th, td { text-align: left; padding: 7px 6px; border-top: 1px solid #eceef1; vertical-align: middle; }
 th { color: var(--muted); font-weight: 600; border-top: none; }
