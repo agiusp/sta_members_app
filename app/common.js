@@ -153,10 +153,15 @@ window.STA = (function () {
       { key: 'courts', label: 'Court Assignments', href: 'courts.html' },
       { key: 'review', label: 'Game Review', href: 'review.html' }] },
     { key: 'casual', label: 'Casual Play', href: 'casual.html' },
+    { key: 'rating', label: 'My Rating', href: 'rating.html', tabs: [
+      { key: 'rating', label: 'My Rating', href: 'rating.html' },
+      { key: 'report', label: 'Report a game', href: 'rating-report.html' },
+      { key: 'how', label: 'How it works', href: 'rating-how.html' }] },
     { key: 'dev', label: 'Developers', href: 'members.html', devOnly: true, tabs: [
       { key: 'members', label: 'Members', href: 'members.html' },
       { key: 'sunday', label: 'Sunday Program', href: 'developer.html' },
       { key: 'scheduler', label: 'Scheduler', href: 'scheduler.html' },
+      { key: 'ratings', label: 'Ratings', href: 'dev-ratings.html' },
       { key: 'settings', label: 'Settings', href: 'settings.html' }] }
   ];
   const BRAND_CACHE = 'sta-branding';

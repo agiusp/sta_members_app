@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>How ratings work</title>
+<link rel="stylesheet" href="styles.css">
+<style>
+  .doc { font-size: 15px; line-height: 1.55; max-width: 760px; }
+  .doc h2 { margin-top: 26px; }
+  .doc h2:first-child { margin-top: 0; }
+  .doc table { max-width: 520px; font-size: 14px; margin: 8px 0 12px; }
+  .doc td.num, .doc th.num { text-align: right; }
+  .formula { background: #f7f8fa; border: 1px solid #e2e5e9; border-radius: 6px; padding: 10px 12px; font-size: 14px; margin: 8px 0; }
+  .doc ol.sources li { margin-bottom: 10px; }
+  .doc a { color: var(--accent); }
+</style>
+</head>
+<body data-page="How ratings work" data-section="rating" data-tab="how">
+
+<main class="page">
+<section class="panel doc">
+  <!-- The numbers here must match the rating_* functions in
+       supabase/migrations/20261020000000_my_rating.sql. -->
+  <h2>In short</h2>
+  <p>Your rating is on the familiar NTRP scale (2.5, 3.0, 3.5 …), shown to two decimals so you can see small changes.
+    After every match that counts, it moves up if your side won more games than expected, and down if it won fewer.
+    It's not about who won the match: losing 4-6 to a much stronger side can still raise your rating.
+    Only you can see your rating.</p>
+
+  <h2>Where you start</h2>
+  <p>Everyone starts at their level in the club's Members table, which the developers keep. If the club changes your
+    level there, your rating is worked out again from that new starting point. Your rating is <strong>provisional</strong>
+    for your first 5 results, while it moves faster to find your level.</p>
+
+  <h2>Which results count</h2>
+  <ul>
+    <li><strong>Sunday Doubles:</strong> the scores in your Game Review. Each group of sets with the same partners
+      counts as one result.</li>
+    <li><strong>Other games with members</strong>, casual play or league games, reported on the
+      <a href="rating-report.html">Report a game</a> tab, from the last 30 days. The player reporting it gives the
+      day, singles or doubles, casual play or which league, the players and the score.</li>
+  </ul>
+  <p>Every score is checked by the other players:</p>
+  <ul>
+    <li>When someone reports a game you played in, you're asked to <strong>Confirm</strong> or
+      <strong>Dispute</strong> it the next time you open My Rating, before you can carry on.</li>
+    <li><strong>Reported games</strong> count only once <strong>every</strong> other player in the game, your
+      partner included, has confirmed the score.</li>
+    <li><strong>Sunday Doubles:</strong> one opponent confirming is enough. If an opponent's own Game Review has the
+      same score, that confirms it. A Sunday result nobody answers counts automatically <strong>7 days</strong> after
+      its latest score was given.</li>
+    <li><strong>Disputing a score</strong> means giving the score you think is right (and, if you like, why). Your
+      score then goes back to the other players, including whoever reported it, to confirm or dispute in turn. It goes
+      back and forth like this until everyone has confirmed the same score, and only then counts. Everyone sees each
+      score that was proposed. A Game Review with a different score works the same way.</li>
+    <li>A score can be disputed up to <strong>3 times</strong>. The 3rd dispute sends the game to the developers,
+      who settle the score (or decide the game doesn't count), with every score proposed in front of them.</li>
+    <li>Ratings are worked out again from all counted results each time, in date order, so a late confirmation or a
+      corrected score fixes everything after it.</li>
+  </ul>
+
+  <h2>How one result changes your rating</h2>
+  <div class="formula">change = step size × how much it counts × (share of games you won − share you were expected to win)</div>
+
+  <p><strong>Share of games you won.</strong> All the games in the match: winning 6-3, 6-4 is 12 of 19 games, 63%.</p>
+
+  <p><strong>Share you were expected to win</strong> comes from the gap between the two sides' ratings before the match.
+    In doubles, a side's rating is the average of the two partners. Every 0.5 of a gap doubles the expected odds:</p>
+  <table>
+    <tr><th>Your side is rated higher by</th><th class="num">Expected share of games</th></tr>
+    <tr><td>0 (an even match)</td><td class="num">50%</td></tr>
+    <tr><td>0.25</td><td class="num">59%</td></tr>
+    <tr><td>0.5</td><td class="num">67% (2 games for every 1)</td></tr>
+    <tr><td>0.75</td><td class="num">74%</td></tr>
+    <tr><td>1.0</td><td class="num">80% (4 games for every 1)</td></tr>
+  </table>
+  <p>If your side is rated lower, it's the other way round: 0.5 lower expects 33%.</p>
+
+  <p><strong>Step size</strong> is bigger while you're new and gets smaller as you play more, so one odd match doesn't
+    swing an established rating much. It is 0.8 ÷ (results before this one + 5)<sup>0.4</sup>:</p>
+  <table>
+    <tr><th>Results before this one</th><th class="num">Step size</th></tr>
+    <tr><td>0</td><td class="num">0.42</td></tr>
+    <tr><td>5</td><td class="num">0.32</td></tr>
+    <tr><td>10</td><td class="num">0.27</td></tr>
+    <tr><td>20</td><td class="num">0.22</td></tr>
+    <tr><td>50</td><td class="num">0.16</td></tr>
+  </table>
+
+  <p><strong>How much it counts.</strong> A match of 20 games or more counts in full. Shorter ones count in proportion,
+    so a single 6-4 set (10 games) counts half.</p>
+
+  <p><strong>An example.</strong> You're rated 3.50 with 10 results so far. You and your partner (3.50) beat two 3.50
+    players 6-3, 6-4. Expected: 50% (an even match). Won: 12 of 19 = 63%. Counts: 19 of 20 games = 95%.
+    Change = 0.27 × 0.95 × (63% − 50%) = <strong>+0.034</strong>, so your rating goes to 3.53.
+    Your partner moves by the same result, with their own step size; your opponents move down the same way.</p>
+  <p>Ratings stay between 1.0 and 7.0. On My Rating, “How this was worked out” under each result shows these numbers,
+    and the <strong>What if?</strong> box lets you try any result.</p>
+
+  <h2>Your level, and the 0.1 buffer</h2>
+  <p>Your <strong>level</strong> is your rating rounded to the nearest 0.5: a rating of 3.15 is a 3.0, and 3.9 is a 4.0.
+    The halfway points between levels are at x.25 and x.75. (USTA rounds up instead: their 3.5 players are rated
+    3.01 to 3.50.)</p>
+  <p>So that a rating sitting right on a halfway point doesn't flip your level back and forth every week, your level
+    only changes once your rating is <strong>0.1 past the halfway point</strong>:</p>
+  <ul>
+    <li><strong>Up:</strong> a 3.5 becomes a 4.0 when the rating reaches <strong>3.85</strong> (not 3.75).</li>
+    <li><strong>Down:</strong> a 3.5 becomes a 3.0 when the rating falls below <strong>3.15</strong> (not 3.25).</li>
+  </ul>
+  <p>For example, a 3.5 player whose rating dips to 3.20 stays a 3.5; at 3.12 they become a 3.0, and then need to
+    reach 3.35 to be a 3.5 again.</p>
+  <p>Your level is also what the Sunday Doubles organizers use to put players on courts.</p>
+
+  <h2>Who sees what</h2>
+  <p>Only you see your rating and its history. Other players never see it. Developers see your <strong>level</strong>
+    (in 0.5 steps, e.g. 3.5) in the club's Members table, where the Sunday Doubles scheduler uses it, but not your
+    exact rating. They can also see the games and scores that were reported, and who has confirmed them, for example
+    to follow a league's results and to settle disputes. The share of games you were expected to win is shown so you can check
+    the maths, so it does hint at your opponents' ratings at the time.</p>
+
+  <h2>Sources</h2>
+  <p>The method combines well-known, published rating ideas. The particular numbers (0.5 of a gap doubles the odds,
+    the 0.8 in the step size, 20 games to count in full, the 0.1 buffer) are the club's choices, and may be tuned.</p>
+  <ol class="sources">
+    <li><strong>Expected share from the rating gap</strong>: the Bradley–Terry model for paired comparisons, where each
+      fixed gap multiplies the odds by the same amount. R. A. Bradley and M. E. Terry (1952), “Rank analysis of
+      incomplete block designs: I. The method of paired comparisons”, <em>Biometrika</em> 39(3/4), 324–345,
+      <a href="https://doi.org/10.2307/2334029" target="_blank" rel="noopener">doi:10.2307/2334029</a>.
+      Overview: <a href="https://en.wikipedia.org/wiki/Bradley%E2%80%93Terry_model" target="_blank" rel="noopener">Bradley–Terry model (Wikipedia)</a>.</li>
+    <li><strong>Moving the rating by result minus expectation</strong>: the Elo rating system, used for chess and many
+      sports. <a href="https://en.wikipedia.org/wiki/Elo_rating_system" target="_blank" rel="noopener">Elo rating system (Wikipedia)</a>.
+      The chess federation's rules give new players bigger steps (K = 40 until 30 games, then 20):
+      <a href="https://handbook.fide.com/chapter/B022017" target="_blank" rel="noopener">FIDE Rating Regulations, section 8.5</a>.</li>
+    <li><strong>Step size shrinking with results played, 1 ÷ (results + 5)<sup>0.4</sup></strong>: from Elo ratings for
+      tennis, which predicted professional matches best among the models compared. S. Kovalchik (2016), “Searching for
+      the GOAT of tennis win prediction”, <em>Journal of Quantitative Analysis in Sports</em> 12(3), 127–138,
+      <a href="https://doi.org/10.1515/jqas-2015-0059" target="_blank" rel="noopener">doi:10.1515/jqas-2015-0059</a>.</li>
+    <li><strong>Counting games won rather than wins, and weighting longer matches more</strong>: the Universal Tennis
+      Rating (UTR) compares the games you actually win with the games expected from the rating gap, and gives longer
+      formats more weight. <a href="https://www.utrsports.net/blogs/news/how-utr-works" target="_blank" rel="noopener">How UTR Rating Works (UTR Sports)</a>.</li>
+    <li><strong>The 0.5 levels</strong>: the USTA's National Tennis Rating Program (NTRP).
+      <a href="https://www.usta.com/en/home/coach-organize/tennis-tool-center/run-usta-programs/national/understanding-ntrp-ratings.html" target="_blank" rel="noopener">Understanding NTRP Ratings (USTA)</a>.</li>
+  </ol>
+</section>
+<div id="msg"></div>
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/dist/umd/supabase.js"
+        integrity="sha384-Rj26LVGvoeRVR6+mwQmFfcR3QOBEwT+ZmuCWpuiqeTzJpCs0ER4ITAWGb4Hiy3Ok"
+        crossorigin="anonymous"></script>
+<script src="config.js"></script>
+<script src="common.js"></script>
+<script>
+STA.initPage().catch(err => STA.showMessage(document.getElementById('msg'), err.message));
+</script>
+</body>
+</html>

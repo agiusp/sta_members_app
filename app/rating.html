@@ -1,0 +1,407 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>My Rating</title>
+<link rel="stylesheet" href="styles.css">
+<style>
+  .hero { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 6px 28px; }
+  .hero-level { font-size: 56px; font-weight: 700; line-height: 1; color: var(--ink); }
+  .hero-fine { font-size: 20px; font-weight: 600; }
+  .hero-label { font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 6px; }
+  .bounds { font-size: 14px; margin-top: 12px; }
+  .result { border-top: 1px solid #eceef1; padding: 12px 0; }
+  .result:first-child { border-top: none; }
+  .result-head { font-weight: 600; }
+  .result-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; align-items: flex-end; }
+  .result-actions textarea { width: 100%; min-height: 60px; font: inherit; font-size: 14px; padding: 8px 9px;
+    border: 1px solid #cbd2d9; border-radius: 6px; color: var(--ink); }
+  .chart-wrap { position: relative; margin-top: 8px; }
+  .chart-wrap svg { display: block; width: 100%; height: auto; touch-action: pan-y; }
+  .tip { position: absolute; pointer-events: none; background: #fff; border: 1px solid #d5d9de; border-radius: 6px;
+    padding: 7px 9px; font-size: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); white-space: nowrap; }
+  .tip strong { font-size: 13px; }
+  .up { color: #1d5e30; } .down { color: #7a2320; }
+  td.num, th.num { text-align: right; white-space: nowrap; }
+  td.score { white-space: nowrap; }
+  details.why summary { cursor: pointer; color: var(--accent); font-size: 12px; }
+  details.why div { font-size: 13px; margin-top: 6px; line-height: 1.5; }
+  .calc input { width: 90px; }
+  ol.proposals { margin: 6px 0; padding-left: 20px; font-size: 14px; }
+  ol.proposals li { margin-bottom: 3px; }
+  .set-input input { width: 80px; }
+  .set-input { margin-top: 6px; }
+  .set-input[hidden] { display: none; }
+  .dispute-form label { align-items: flex-start; }
+  .dispute-form textarea { align-self: stretch; }
+</style>
+</head>
+<body data-page="My Rating" data-section="rating" data-tab="rating">
+
+<main class="page">
+<div class="test-banner" id="testBanner" hidden></div>
+<div id="body"><section class="panel"><p class="muted">Loading…</p></section></div>
+<div id="msg"></div>
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/dist/umd/supabase.js"
+        integrity="sha384-Rj26LVGvoeRVR6+mwQmFfcR3QOBEwT+ZmuCWpuiqeTzJpCs0ER4ITAWGb4Hiy3Ok"
+        crossorigin="anonymous"></script>
+<script src="config.js"></script>
+<script src="common.js"></script>
+<script>
+(function () {
+  const { esc, rpc, fmtDateTime, fmtPlayDate, showMessage } = STA;
+  const $ = id => document.getElementById(id);
+  let data = null;
+
+  const fine = r => Number(r).toFixed(2);
+  const level = r => Number(r).toFixed(1);
+  const pct = x => Math.round(Number(x) * 100) + '%';
+  const signed = x => (x >= 0 ? '+' : '−') + Math.abs(Number(x)).toFixed(3);
+  const score = sets => sets.map(s => `${s[0]}-${s[1]}`).join(', ');
+  const games = sets => sets.reduce((a, s) => [a[0] + s[0], a[1] + s[1]], [0, 0]);
+  const who = r => (r.partner ? `You & ${r.partner}` : 'You') + ' vs. ' + r.opponents.join(' & ');
+  const where = r => r.source === 'sunday' ? 'Sunday Doubles'
+    : r.kind === 'league' ? `League: ${r.league}` : 'Casual play';
+  // Reported games: who has confirmed, and who hasn't answered yet.
+  function answersLine(r) {
+    if (!r.answers) return '';
+    const name = a => a.name === data.player.name ? 'you' : a.name;
+    const yes = r.answers.filter(a => a.answer === 'confirmed').map(name);
+    const no = r.answers.filter(a => !a.answer).map(name);
+    return [yes.length ? `Confirmed by ${yes.join(', ')}.` : '', no.length ? `Waiting for ${no.join(', ')}.` : ''].join(' ');
+  }
+  // Every score proposed so far, when there has been more than one.
+  function historyHtml(r) {
+    if (!r.history || r.history.length < 2) return '';
+    return `<ol class="proposals">${r.history.map((h, i) => `<li>${h.by_me ? 'You' : esc(h.by)}
+      ${i === 0 ? 'reported' : 'proposed'} <strong>${esc(score(h.sets))}</strong>${h.reason ? `: “${esc(h.reason)}”` : ''}
+      <span class="muted">${esc(fmtDateTime(h.at))}</span></li>`).join('')}</ol>`;
+  }
+  // Inputs for the score a player says is right, filled in with the current one.
+  function scoreInputs(sets) {
+    const count = sets.length;
+    let rows = `<label>Number of sets <select class="set-count">${[1, 2, 3, 4, 5].map(n =>
+      `<option ${n === count ? 'selected' : ''}>${n}</option>`).join('')}</select></label><div class="set-inputs">`;
+    for (let i = 0; i < 5; i++) {
+      const v = sets[i] || ['', ''];
+      rows += `<div class="row set-input" data-set="${i}" ${i < count ? '' : 'hidden'}>
+        <strong style="padding-bottom:9px;min-width:50px">Set ${i + 1}</strong>
+        <label>Your side <input type="number" class="mine" min="0" max="7" value="${v[0]}"></label>
+        <label>Their side <input type="number" class="theirs" min="0" max="7" value="${v[1]}"></label></div>`;
+    }
+    return rows + '</div>';
+  }
+  // After 3 disputes a game goes to the developers (as in the database).
+  const MAX_DISPUTES = 3;
+  const disputesNote = r => r.disputes ? `Disputed ${r.disputes} of ${MAX_DISPUTES} times.` : '';
+  const countsNote = r => r.source === 'sunday'
+    ? `If nobody answers, it counts automatically from ${fmtDateTime(r.auto_confirms_at)}.`
+    : 'It counts once every player in the game has confirmed it.';
+
+  async function start() {
+    if (!(await STA.initPage())) return;
+    await load();
+  }
+
+  async function load() {
+    try { data = await rpc('my_rating'); }
+    catch (err) { $('body').innerHTML = ''; showMessage($('msg'), err.message); return; }
+    STA.showTestClock($('testBanner'), data.test_mode, data.now);
+    render();
+  }
+
+  function render() {
+    showMessage($('msg'), '');
+    if (!data.player) { $('body').innerHTML = '<section class="panel"><p>Your account has no player linked to it yet.</p></section>'; return; }
+    if (data.to_confirm.length) { renderGate(); return; }
+    if (data.player.start == null) {
+      $('body').innerHTML = `<section class="panel"><p>Your starting level hasn't been set yet, so there's no rating to show.
+        Please ask a developer to add your level to the Members table.</p></section>` + testPanel();
+      wireTest();
+      return;
+    }
+    $('body').innerHTML = ratingPanel() + chartPanel() + historyPanel() + waitingPanel() + calcPanel() + testPanel();
+    drawChart();
+    wireWaiting();
+    wireCalc();
+    wireTest();
+  }
+
+  // ---------- Results waiting for this player's answer ----------
+  function renderGate() {
+    const n = data.to_confirm.length;
+    $('body').innerHTML = `<section class="panel">
+      <h2>Please confirm ${n === 1 ? 'this result' : 'these results'}</h2>
+      <p>${n === 1 ? 'A score for a game you played in needs' : 'Scores for games you played in need'} your answer.
+        Please confirm or dispute ${n === 1 ? 'it' : 'each one'} to continue to My Rating.
+        To dispute a score, give the score you think is right: it goes back to the other players to confirm or
+        dispute, until everyone agrees.</p>
+      ${data.to_confirm.map(r => `<div class="result" data-id="${r.id}">
+        <div class="result-head">${esc(fmtPlayDate(r.played_on))} · ${esc(where(r))}</div>
+        <div>${esc(who(r))}</div>
+        <div>Score, your side first: <strong>${esc(score(r.sets))}</strong></div>
+        ${historyHtml(r)}
+        <div class="muted">${r.history && r.history.length > 1 ? 'Latest score proposed' : 'Reported'} by
+          ${esc(r.reported_by)}, ${esc(fmtDateTime(r.reported_at))}. ${esc(disputesNote(r))} ${esc(answersLine(r))}
+          ${esc(countsNote(r))}</div>
+        <div class="result-actions">
+          <button class="confirm">Confirm</button>
+          <button class="secondary dispute">Dispute</button>
+        </div>
+        <div class="dispute-form" hidden>
+          <p style="margin:12px 0 6px"><strong>What was the score?</strong> Your side first. ${r.disputes >= MAX_DISPUTES - 1
+            ? `<strong>This is the ${MAX_DISPUTES}rd dispute, so the game goes to the developers to settle</strong>, with every score proposed.`
+            : 'It goes back to the other players to confirm or dispute.'}</p>
+          ${scoreInputs(r.sets)}
+          <label style="margin-top:10px">Why? (optional; the other players see this)
+            <textarea maxlength="500" placeholder="For example: the second set was 4-6, not 6-4"></textarea></label>
+          <div class="result-actions">
+            <button class="send-dispute">Send my score</button>
+            <button class="secondary cancel-dispute">Cancel</button>
+          </div>
+        </div>
+      </div>`).join('')}
+    </section>`;
+    document.querySelectorAll('.result[data-id]').forEach(el => {
+      const id = Number(el.dataset.id);
+      const form = el.querySelector('.dispute-form');
+      el.querySelector('.confirm').addEventListener('click', () => answer(id, true));
+      el.querySelector('.dispute').addEventListener('click', () => { form.hidden = false; });
+      el.querySelector('.cancel-dispute').addEventListener('click', () => { form.hidden = true; });
+      el.querySelector('.set-count').addEventListener('change', e => {
+        el.querySelectorAll('.set-input').forEach(row => { row.hidden = Number(row.dataset.set) >= Number(e.target.value); });
+      });
+      el.querySelector('.send-dispute').addEventListener('click', () => {
+        const sets = [];
+        for (const row of el.querySelectorAll('.set-input:not([hidden])')) {
+          const a = row.querySelector('.mine').value, b = row.querySelector('.theirs').value;
+          const ok = v => /^\d+$/.test(v) && Number(v) <= 7;
+          if (!ok(a) || !ok(b)) {
+            showMessage($('msg'), `Set ${Number(row.dataset.set) + 1}: enter the games won by each side, from 0 to 7.`);
+            return;
+          }
+          sets.push([Number(a), Number(b)]);
+        }
+        answer(id, false, el.querySelector('textarea').value, sets);
+      });
+    });
+  }
+
+  async function answer(id, confirm, reason, sets) {
+    try {
+      data = await rpc('answer_rating_result', { p_result_id: id, p_confirm: confirm, p_reason: reason || null,
+        p_sets: sets || null });
+      render();
+      const sent = !confirm && data.waiting.find(w => w.id === id);
+      showMessage($('msg'), confirm ? 'Thank you, the score was confirmed.'
+        : sent && sent.status === 'developers' ? 'Thank you. The game now goes to the developers to settle.'
+        : 'Thank you. Your score was sent to the other players to confirm or dispute.', 'ok');
+    } catch (err) { showMessage($('msg'), err.message); }
+  }
+
+  // ---------- The rating ----------
+  function ratingPanel() {
+    const o = Number(data.official);
+    const provisional = data.played < 5;
+    return `<section class="panel">
+      <div class="hero">
+        <div><div class="hero-label">Your level</div><div class="hero-level">${level(o)}</div></div>
+        <div><div class="hero-label">Your rating</div><div class="hero-fine">${fine(data.rating)}</div></div>
+        ${provisional ? '<span class="badge wait">Provisional</span>' : ''}
+      </div>
+      <p class="bounds">Your level goes up to <strong>${level(o + 0.5)}</strong> when your rating reaches
+        <strong>${fine(o + 0.35)}</strong>${o > 1 ? `, and down to <strong>${level(o - 0.5)}</strong> if it falls below <strong>${fine(o - 0.35)}</strong>` : ''}.</p>
+      <p class="muted">Started at ${esc(data.player.level)} (your level in the club's Members table) ·
+        ${data.played} result${data.played === 1 ? '' : 's'} counted${provisional ? ' · provisional until 5 results' : ''} ·
+        <a href="rating-how.html">How it works</a></p>
+    </section>`;
+  }
+
+  // ---------- Chart: rating after each result ----------
+  function chartPanel() {
+    if (!rated().length) return '';
+    return `<section class="panel"><div class="panel-title">Your rating after each result</div>
+      <div class="chart-wrap" id="chart"></div>
+      <p class="muted">Lines mark the official levels. Hover over or tap the chart to see each result.</p></section>`;
+  }
+
+  const rated = () => data.history.filter(h => h.rated);
+
+  function drawChart() {
+    const box = $('chart');
+    if (!box) return;
+    const hs = rated();
+    const pts = [{ y: Number(data.player.start), label: 'Start', sub: `Your level in the Members table` }]
+      .concat(hs.map(h => ({ y: Number(h.rating_after), label: fmtPlayDate(h.played_on),
+        sub: `${score(h.sets)} · ${signed(h.change)}`, official: Number(h.official_after) })));
+    const W = 720, H = 260, L = 40, R = 52, T = 14, B = 26;
+    const ys = pts.map(p => p.y);
+    const lo = Math.floor((Math.min(...ys) - 0.15) * 2) / 2, hi = Math.ceil((Math.max(...ys) + 0.15) * 2) / 2;
+    const x = i => L + (pts.length === 1 ? 0 : i * (W - L - R) / (pts.length - 1));
+    const y = v => T + (hi - v) * (H - T - B) / (hi - lo);
+    let grid = '';
+    for (let v = lo; v <= hi + 1e-9; v += 0.5) {
+      grid += `<line x1="${L}" x2="${W - R}" y1="${y(v)}" y2="${y(v)}" stroke="#e6e8eb" stroke-width="1"/>
+        <text x="${L - 8}" y="${y(v) + 4}" text-anchor="end" font-size="11" fill="#6b7280">${level(v)}</text>`;
+    }
+    const path = pts.map((p, i) => `${i ? 'L' : 'M'}${x(i).toFixed(1)},${y(p.y).toFixed(1)}`).join('');
+    const dots = pts.map((p, i) => `<circle cx="${x(i)}" cy="${y(p.y)}" r="4" fill="var(--accent)" stroke="#fff" stroke-width="2"/>`).join('');
+    const last = pts[pts.length - 1];
+    box.innerHTML = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Rating after each result, from ${fine(pts[0].y)} to ${fine(last.y)}">
+      ${grid}
+      <line x1="${L}" x2="${W - R}" y1="${H - B}" y2="${H - B}" stroke="#d5d9de" stroke-width="1"/>
+      <text x="${L}" y="${H - 8}" font-size="11" fill="#6b7280">Start</text>
+      <text x="${W - R}" y="${H - 8}" font-size="11" fill="#6b7280" text-anchor="end">${esc(last.label)}</text>
+      <path d="${path}" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+      <line id="cross" y1="${T}" y2="${H - B}" stroke="#9aa1ab" stroke-width="1" visibility="hidden"/>
+      ${dots}
+      <text x="${x(pts.length - 1) + 8}" y="${y(last.y) + 4}" font-size="12" font-weight="600" fill="#1f2933">${fine(last.y)}</text>
+      <rect x="${L - 10}" y="0" width="${W - L - R + 20}" height="${H}" fill="transparent" id="hit"/>
+    </svg><div class="tip" id="tip" hidden></div>`;
+    const svg = box.querySelector('svg'), tip = $('tip'), cross = $('cross');
+    const show = ev => {
+      const r = svg.getBoundingClientRect();
+      const px = (ev.clientX - r.left) * W / r.width;
+      let i = Math.round((px - L) / ((W - L - R) / Math.max(1, pts.length - 1)));
+      i = Math.max(0, Math.min(pts.length - 1, i));
+      const p = pts[i];
+      cross.setAttribute('x1', x(i)); cross.setAttribute('x2', x(i)); cross.setAttribute('visibility', 'visible');
+      tip.innerHTML = `<strong>${fine(p.y)}</strong>${p.official != null ? ` (level ${level(p.official)})` : ''}<br>${esc(p.label)}<br><span class="muted">${esc(p.sub)}</span>`;
+      tip.hidden = false;
+      const left = x(i) * r.width / W, top = y(p.y) * r.height / H;
+      tip.style.left = Math.min(Math.max(0, left - tip.offsetWidth / 2), r.width - tip.offsetWidth) + 'px';
+      tip.style.top = Math.max(0, top - tip.offsetHeight - 12) + 'px';
+    };
+    svg.addEventListener('pointermove', show);
+    svg.addEventListener('pointerdown', show);
+    svg.addEventListener('pointerleave', () => { tip.hidden = true; cross.setAttribute('visibility', 'hidden'); });
+  }
+
+  // ---------- History, newest first, with how each change was worked out ----------
+  function historyPanel() {
+    if (!data.history.length) {
+      return `<section class="panel"><p>No results count yet. Results come from your Sunday Doubles Game Reviews
+        and from games reported on the <a href="rating-report.html">Report a game</a> tab.</p></section>`;
+    }
+    const rows = data.history.slice().reverse().map(h => {
+      const [mine, theirs] = games(h.sets);
+      if (!h.rated) {
+        return `<tr><td>${esc(fmtPlayDate(h.played_on))}</td><td>${esc(who(h))}</td><td class="score">${esc(score(h.sets))}</td>
+          <td colspan="4" class="muted">Not rated: a player in this match has no starting level.</td></tr>`;
+      }
+      const ch = Number(h.change);
+      const moved = Number(h.official_after) !== Number(h.official_before);
+      return `<tr><td>${esc(fmtPlayDate(h.played_on))}<div class="muted">${esc(where(h))}${h.auto_confirmed ? ' · counted automatically' : ''}</div></td>
+        <td>${esc(who(h))}
+          <details class="why"><summary>How this was worked out</summary><div>
+            You won ${mine} of ${mine + theirs} games (${pct(h.actual)}).
+            With everyone's ratings before this match, your side was expected to win ${pct(h.expected)}.<br>
+            Step size ${Number(h.step).toFixed(3)} (you had ${h.played_before} result${h.played_before === 1 ? '' : 's'} before this one)
+            × counts ${pct(h.weight)} (${mine + theirs} games)
+            × (${pct(h.actual)} − ${pct(h.expected)}) = <strong>${signed(ch)}</strong>.<br>
+            Rating ${fine(h.rating_before)} → ${fine(h.rating_after)}.
+            ${moved ? `Your level changed from ${level(h.official_before)} to ${level(h.official_after)}.` : ''}
+          </div></details></td>
+        <td class="score">${esc(score(h.sets))}</td>
+        <td class="num">${pct(h.actual)}</td>
+        <td class="num">${pct(h.expected)}</td>
+        <td class="num ${ch >= 0 ? 'up' : 'down'}">${signed(ch)}</td>
+        <td class="num">${fine(h.rating_after)}${moved ? ` <strong>→ ${level(h.official_after)}</strong>` : ''}</td></tr>`;
+    }).join('');
+    return `<section class="panel"><div class="panel-title">Results that count</div>
+      <div class="table-wrap"><table>
+        <tr><th>Date</th><th>Match</th><th>Score</th><th class="num">Games won</th><th class="num">Expected</th>
+          <th class="num">Change</th><th class="num">Rating</th></tr>${rows}
+      </table></div></section>`;
+  }
+
+  function waitingPanel() {
+    if (!data.waiting.length) return '';
+    return `<section class="panel"><div class="panel-title">Not counted yet</div>
+      ${data.waiting.map(r => `<div class="result">
+        <div class="result-head">${esc(fmtPlayDate(r.played_on))} · ${esc(where(r))}</div>
+        <div>${esc(who(r))}: <strong>${esc(score(r.sets))}</strong>${r.reported_by_me ? ' (your score)' : ''}</div>
+        ${historyHtml(r)}
+        <div class="muted">${r.status === 'developers'
+            ? `Disputed ${MAX_DISPUTES} times, so the developers will settle the score.`
+            : r.source === 'sunday'
+              ? `${esc(disputesNote(r))} Waiting for an opponent to confirm. ${esc(countsNote(r))}`
+              : `${esc(disputesNote(r))} ${esc(answersLine(r))} ${esc(countsNote(r))}`}</div>
+        ${r.first_reported_by_me && r.source === 'reported' ? `<div class="result-actions"><button class="secondary withdraw" data-id="${r.id}">Withdraw</button></div>` : ''}
+      </div>`).join('')}</section>`;
+  }
+
+  function wireWaiting() {
+    document.querySelectorAll('.withdraw').forEach(b => b.addEventListener('click', async () => {
+      try { data = await rpc('withdraw_rating_result', { p_result_id: Number(b.dataset.id) }); render(); }
+      catch (err) { showMessage($('msg'), err.message); }
+    }));
+  }
+
+  // ---------- What if ----------
+  function calcPanel() {
+    return `<section class="panel calc"><div class="panel-title">What if?</div>
+      <p class="muted" style="margin-top:0">Try a result to see how it would change your rating. Nothing is saved.
+        Leave your partner and the second opponent empty for singles.</p>
+      <div class="row">
+        <label>Your rating <input id="cMe" type="number" step="0.01" min="1" max="7" value="${fine(data.rating)}"></label>
+        <label>Your partner <input id="cPartner" type="number" step="0.01" min="1" max="7" placeholder="singles"></label>
+        <label>Opponent 1 <input id="cOpp1" type="number" step="0.01" min="1" max="7" value="${fine(data.rating)}"></label>
+        <label>Opponent 2 <input id="cOpp2" type="number" step="0.01" min="1" max="7" placeholder="singles"></label>
+      </div>
+      <div class="row" style="margin-top:10px">
+        <label>Games you won <input id="cMine" type="number" min="0" max="35" value="12"></label>
+        <label>Games they won <input id="cTheirs" type="number" min="0" max="35" value="7"></label>
+        <button id="cGo">Work it out</button>
+      </div>
+      <div id="cOut" style="margin-top:10px"></div></section>`;
+  }
+
+  function wireCalc() {
+    $('cGo').addEventListener('click', async () => {
+      const num = id => $(id).value === '' ? null : Number($(id).value);
+      try {
+        const r = await rpc('rating_preview', { p_rating: num('cMe'), p_official: Number(data.official), p_played: data.played,
+          p_partner: num('cPartner'), p_opponent1: num('cOpp1'), p_opponent2: num('cOpp2'),
+          p_my_games: num('cMine'), p_their_games: num('cTheirs') });
+        $('cOut').innerHTML = `<p style="margin:0">You'd be expected to win <strong>${pct(r.expected)}</strong> of the games and
+          won <strong>${pct(r.actual)}</strong>. Step size ${Number(r.step).toFixed(3)} × counts ${pct(r.weight)} ×
+          (${pct(r.actual)} − ${pct(r.expected)}) = <strong class="${r.change >= 0 ? 'up' : 'down'}">${signed(r.change)}</strong>:
+          rating ${fine(num('cMe'))} → <strong>${fine(r.rating_after)}</strong>, level ${level(r.official_after)}.</p>`;
+      } catch (err) { $('cOut').innerHTML = `<div class="msg error">${esc(err.message)}</div>`; }
+    });
+  }
+
+  // ---------- Test mode (developers) ----------
+  function testPanel() {
+    if (!(data.test_mode && data.developer)) return '';
+    return `<section class="panel"><div class="panel-title">Test mode (developers only)</div>
+      <p class="muted" style="margin-top:0">Adds made-up results for you against random players, one a week going back
+        from today, with scores based on everyone's levels plus some luck. The last 2 are reported by an opponent,
+        so you'll be asked to confirm them.</p>
+      <div class="row">
+        <label>Results <input id="simCount" type="number" min="1" max="40" value="12" style="width:80px"></label>
+        <button id="simBtn">Add made-up results</button>
+        <button class="secondary" id="simClear">Remove all made-up results</button>
+      </div></section>`;
+  }
+
+  function wireTest() {
+    $('simBtn')?.addEventListener('click', async () => {
+      try { await rpc('dev_simulate_rating_results', { p_count: Number($('simCount').value) }); await load(); }
+      catch (err) { showMessage($('msg'), err.message); }
+    });
+    $('simClear')?.addEventListener('click', async () => {
+      try { await rpc('dev_clear_simulated_ratings'); await load(); }
+      catch (err) { showMessage($('msg'), err.message); }
+    });
+  }
+
+  start().catch(err => showMessage($('msg'), err.message));
+})();
+</script>
+</body>
+</html>

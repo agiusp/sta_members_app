@@ -162,3 +162,6 @@ select s.id, h.court, p.id, h.balls
 
 -- Everyone above plays Sunday Doubles (tests switch individual players off).
 update public.players set sunday_doubles = true;
+
+-- A made-up league, for reporting league games under My Rating.
+insert into public.rating_leagues (name) values ('Fall Doubles League (test)');

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Fills a DEMO copy of the app with made-up club data: members, three past
-// Sundays of play, this week's sign-ups, game reviews, news, and Casual Play
-// times. It turns on demo mode (emails go to the Demo inbox), test mode with
+// Sundays of play, this week's sign-ups, game reviews, news, Casual Play
+// times, and My Rating games and leagues (scripts/demo-ratings.mjs). It turns on demo mode (emails go to the Demo inbox), test mode with
 // the clock on the Thursday before the demo Sunday, and switches off
 // two-step sign-in for the demo developer.
 //
@@ -220,6 +220,10 @@ if (!(await table('casual_slots', '?select=id&limit=1')).length) {
     player_id: who(n), starts_at: et(addDays(thursday, d), start), minutes,
     created_at: et(addDays(thursday, -2), '10:00') }))), 'return=minimal');   // posted Tuesday, past the email wait
 }
+
+// ---------- My Rating ----------
+const { seedRatings } = await import('./demo-ratings.mjs');
+await seedRatings();
 
 // ---------- Emails: this week's play-invite and the Casual Play emails ----------
 await patch('sessions', `id=eq.${session.id}`, { play_invite_sent_at: null });

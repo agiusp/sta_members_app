@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ratings</title>
+<link rel="stylesheet" href="styles.css">
+<style>
+  .dispute { border-top: 1px solid #eceef1; padding: 14px 0; }
+  .dispute:first-child { border-top: none; padding-top: 0; }
+  .dispute-head { font-weight: 600; }
+  .reason { background: #f7f8fa; border: 1px solid #e2e5e9; border-radius: 6px; padding: 8px 10px; margin: 8px 0; font-size: 14px; white-space: pre-wrap; }
+  .fix input { width: 200px; }
+  td.score, td.nowrap { white-space: nowrap; }
+  td.num, th.num { text-align: right; white-space: nowrap; }
+  .answers { font-size: 12px; color: var(--muted); margin-top: 2px; }
+  .status { font-weight: 600; }
+  .status.counts { color: #1d5e30; } .status.disputed, .status.settle { color: #7a2320; } .status.waiting { color: #6b4511; }
+  .league-row input { width: 260px; }
+  .standings { margin-bottom: 18px; }
+</style>
+</head>
+<body data-page="Ratings" data-section="dev" data-tab="ratings">
+
+<main class="page">
+<div class="seg" id="views">
+  <button data-view="games" class="active">Games</button><button data-view="leagues">Leagues</button><button data-view="disputes" id="disputesBtn">Disputes</button>
+</div>
+
+<section class="panel" id="gamesPanel">
+  <p class="muted" style="margin-top:0">Every result: Sunday Doubles Game Reviews and games players reported, with each player's answer.
+    Players' ratings are private and never shown here.</p>
+  <div class="row">
+    <label>Type <select id="fType"></select></label>
+    <label>Status <select id="fStatus">
+      <option value="">All</option><option value="counts">Counts</option><option value="waiting">Waiting for players</option>
+      <option value="settle">Needs settling (disputed 3 times)</option>
+      <option value="disputed">Disputed (going back and forth)</option><option value="discarded">Not counted (developers)</option></select></label>
+    <label>From <input type="date" id="fFrom"></label>
+    <label>To <input type="date" id="fTo"></label>
+    <button class="secondary" id="csvBtn">Download (CSV)</button>
+  </div>
+  <div id="standings" style="margin-top:16px"></div>
+  <div id="games" style="margin-top:12px"><p class="muted">Loading…</p></div>
+</section>
+
+<section class="panel" id="leaguesPanel" hidden>
+  <p class="muted" style="margin-top:0">Players can report league games for open leagues. Finish a league when it ends:
+    its games stay, and players can no longer report new ones for it.</p>
+  <div class="row"><label>New league <input id="newLeague" maxlength="80" placeholder="e.g. Fall Doubles League 2026" style="width:280px"></label>
+    <button id="addLeague">Add league</button></div>
+  <div id="leagues" style="margin-top:14px"></div>
+</section>
+
+<section class="panel" id="disputesPanel" hidden>
+  <p class="muted" style="margin-top:0">Games whose score the players are disputing: each dispute proposes a new score,
+    which goes back to the other players until everyone confirms the same one. After the 3rd dispute, a game comes to
+    you to settle (listed first); you can also settle one that is still going back and forth. Until then, it doesn't
+    count toward anyone's rating.</p>
+  <div id="list"><p class="muted">Loading…</p></div>
+</section>
+<div id="msg"></div>
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/dist/umd/supabase.js"
+        integrity="sha384-Rj26LVGvoeRVR6+mwQmFfcR3QOBEwT+ZmuCWpuiqeTzJpCs0ER4ITAWGb4Hiy3Ok"
+        crossorigin="anonymous"></script>
+<script src="config.js"></script>
+<script src="common.js"></script>
+<script>
+(function () {
+  const { esc, rpc, fmtDateTime, fmtPlayDate, showMessage } = STA;
+  const $ = id => document.getElementById(id);
+  const score = sets => sets.map(s => `${s[0]}-${s[1]}`).join(', ');
+  const names = side => side.map(p => p.name).join(' & ');
+  const mmddyyyy = ymd => { const [y, m, d] = ymd.split('-'); return `${m}-${d}-${y}`; };
+  let data = { leagues: [], games: [] };
+
+  async function start() {
+    if (!(await STA.initPage())) return;
+    document.querySelectorAll('#views button').forEach(b => b.addEventListener('click', () => show(b.dataset.view)));
+    ['fType', 'fStatus', 'fFrom', 'fTo'].forEach(id => $(id).addEventListener('change', renderGames));
+    $('csvBtn').addEventListener('click', downloadCsv);
+    $('addLeague').addEventListener('click', () => saveLeague(null, $('newLeague').value, true));
+    try {
+      [data] = await Promise.all([rpc('dev_rating_games'), loadDisputes()]);
+      renderAll();
+    } catch (err) { $('games').innerHTML = ''; showMessage($('msg'), err.message); }
+  }
+
+  function show(view) {
+    document.querySelectorAll('#views button').forEach(b => b.classList.toggle('active', b.dataset.view === view));
+    $('gamesPanel').hidden = view !== 'games';
+    $('leaguesPanel').hidden = view !== 'leagues';
+    $('disputesPanel').hidden = view !== 'disputes';
+    showMessage($('msg'), '');
+  }
+
+  function renderAll() {
+    const keep = $('fType').value;
+    $('fType').innerHTML = `<option value="">All</option><option value="sunday">Sunday Doubles</option>
+      <option value="casual">Casual play</option><option value="league">All leagues</option>` +
+      data.leagues.map(l => `<option value="league:${l.id}">League: ${esc(l.name)}${l.active ? '' : ' (finished)'}</option>`).join('');
+    if ([...$('fType').options].some(o => o.value === keep)) $('fType').value = keep;
+    renderGames();
+    renderLeagues();
+  }
+
+  // ---------- Games ----------
+  const typeLabel = g => g.source === 'sunday' ? `Sunday Doubles, court ${g.court}`
+    : g.kind === 'league' ? `League: ${g.league}` : 'Casual play';
+  // Disputed: not counted yet, and more than one player has proposed a score.
+  const statusKey = g => g.status === 'discarded' ? 'discarded' : g.status === 'developers' ? 'settle'
+    : g.counted ? 'counts' : g.disputed ? 'disputed' : 'waiting';
+  const STATUS = { counts: 'Counts', waiting: 'Waiting', disputed: 'Disputed', settle: 'Needs settling',
+                   discarded: 'Not counted' };
+  function answersText(g) {
+    const rounds = g.disputed ? `${g.rounds} scores proposed` : '';
+    if (g.source === 'sunday') return [g.resolved_by && 'Settled by a developer',
+      g.counted && g.status === 'pending' && 'Counted automatically after 7 days', rounds].filter(Boolean).join(' · ');
+    const no = g.answers.filter(a => !a.answer).map(a => a.name);
+    const yes = g.answers.filter(a => a.answer === 'confirmed').map(a => a.name);
+    return [g.resolved_by && 'Settled by a developer', rounds,
+            g.status === 'pending' && !g.counted && `Current score from ${g.reported_by}`,
+            yes.length && `Confirmed: ${yes.join(', ')}`,
+            no.length && `Not answered: ${no.join(', ')}`].filter(Boolean).join(' · ');
+  }
+
+  function filtered() {
+    const t = $('fType').value, st = $('fStatus').value, from = $('fFrom').value, to = $('fTo').value;
+    return data.games.filter(g =>
+      (!t || (t === 'sunday' ? g.source === 'sunday' : t === 'casual' ? g.kind === 'casual'
+              : t === 'league' ? g.kind === 'league' : String(g.league_id) === t.split(':')[1])) &&
+      (!st || statusKey(g) === st) && (!from || g.played_on >= from) && (!to || g.played_on <= to));
+  }
+
+  function renderGames() {
+    const games = filtered();
+    renderStandings(games);
+    if (!games.length) { $('games').innerHTML = '<p>No games match.</p>'; return; }
+    $('games').innerHTML = `<div class="table-wrap"><table>
+      <tr><th>Date</th><th>Type</th><th>Format</th><th>Side 1</th><th>Side 2</th><th>Score</th><th>Status</th><th>Reported by</th></tr>
+      ${games.map(g => `<tr>
+        <td class="nowrap">${esc(mmddyyyy(g.played_on))}</td>
+        <td>${esc(typeLabel(g))}${g.simulated ? ' <span class="badge none">made up</span>' : ''}</td>
+        <td>${g.format === 'singles' ? 'Singles' : 'Doubles'}</td>
+        <td>${esc(names(g.team1))}</td><td>${esc(names(g.team2))}</td>
+        <td class="score">${esc(score(g.sets))}</td>
+        <td><span class="status ${statusKey(g)}">${STATUS[statusKey(g)]}</span>
+          <div class="answers">${esc(answersText(g))}</div></td>
+        <td>${esc(g.reported_by)}</td></tr>`).join('')}
+    </table></div>`;
+  }
+
+  // Standings for one league: counted games only. A game is won by the side
+  // with more sets (then more games).
+  function renderStandings(games) {
+    const t = $('fType').value;
+    if (!t.startsWith('league:')) { $('standings').innerHTML = ''; return; }
+    const rows = {};
+    const row = p => (rows[p.id] ??= { name: p.name, played: 0, won: 0, lost: 0, sw: 0, sl: 0, gw: 0, gl: 0 });
+    games.filter(g => statusKey(g) === 'counts').forEach(g => {
+      const sets1 = g.sets.filter(s => s[0] > s[1]).length, sets2 = g.sets.filter(s => s[1] > s[0]).length;
+      const g1 = g.sets.reduce((a, s) => a + s[0], 0), g2 = g.sets.reduce((a, s) => a + s[1], 0);
+      const win1 = sets1 !== sets2 ? sets1 > sets2 : g1 !== g2 ? g1 > g2 : null;
+      [[g.team1, sets1, sets2, g1, g2, win1], [g.team2, sets2, sets1, g2, g1, win1 === null ? null : !win1]]
+        .forEach(([side, sw, sl, gw, gl, won]) => side.forEach(p => {
+          const r = row(p);
+          r.played++; if (won === true) r.won++; if (won === false) r.lost++;
+          r.sw += sw; r.sl += sl; r.gw += gw; r.gl += gl;
+        }));
+    });
+    const list = Object.values(rows).sort((a, b) => b.won - a.won || a.lost - b.lost || (b.gw - b.gl) - (a.gw - a.gl) || a.name.localeCompare(b.name));
+    $('standings').innerHTML = `<div class="panel-title">Standings</div>
+      <p class="muted" style="margin-top:0">From games every player confirmed (and those developers counted), with the filters above.</p>
+      ${list.length ? `<div class="table-wrap standings"><table>
+        <tr><th>Player</th><th class="num">Played</th><th class="num">Won</th><th class="num">Lost</th><th class="num">Sets</th><th class="num">Games</th></tr>
+        ${list.map(r => `<tr><td>${esc(r.name)}</td><td class="num">${r.played}</td><td class="num">${r.won}</td><td class="num">${r.lost}</td>
+          <td class="num">${r.sw}-${r.sl}</td><td class="num">${r.gw}-${r.gl}</td></tr>`).join('')}
+      </table></div>` : '<p>No counted games yet.</p>'}`;
+  }
+
+  function downloadCsv() {
+    const rows = [['Date', 'Type', 'Format', 'Side 1', 'Side 2', 'Score', 'Status', 'Answers', 'Reported by']];
+    filtered().forEach(g => rows.push([mmddyyyy(g.played_on), typeLabel(g), g.format === 'singles' ? 'Singles' : 'Doubles',
+      names(g.team1), names(g.team2), score(g.sets), STATUS[statusKey(g)], answersText(g), g.reported_by]));
+    STA.downloadCsv('games.csv', rows);
+  }
+
+  // ---------- Leagues ----------
+  function renderLeagues() {
+    if (!data.leagues.length) { $('leagues').innerHTML = '<p>No leagues yet.</p>'; return; }
+    $('leagues').innerHTML = data.leagues.map(l => `<div class="row league-row" data-id="${l.id}" style="margin-bottom:10px">
+      <label>${l.active ? 'Open' : 'Finished'} · ${l.games} game${l.games === 1 ? '' : 's'}
+        <input class="name" maxlength="80" value="${esc(l.name)}"></label>
+      <button class="secondary rename">Rename</button>
+      <button class="secondary toggle">${l.active ? 'Finish league' : 'Reopen'}</button>
+    </div>`).join('');
+    document.querySelectorAll('.league-row').forEach(el => {
+      const l = data.leagues.find(x => x.id === Number(el.dataset.id));
+      el.querySelector('.rename').addEventListener('click', () => saveLeague(l.id, el.querySelector('.name').value, l.active));
+      el.querySelector('.toggle').addEventListener('click', () => saveLeague(l.id, l.name, !l.active));
+    });
+  }
+
+  async function saveLeague(id, name, active) {
+    showMessage($('msg'), '');
+    try {
+      data = await rpc('dev_save_league', { p_id: id, p_name: name, p_active: active });
+      if (id === null) $('newLeague').value = '';
+      renderAll();
+      showMessage($('msg'), 'Saved.', 'ok');
+    } catch (err) { showMessage($('msg'), err.message); }
+  }
+
+  // ---------- Disputes ----------
+  async function loadDisputes() { renderDisputes(await rpc('dev_rating_disputes')); }
+
+  function renderDisputes(list) {
+    $('disputesBtn').textContent = list.length ? `Disputes (${list.length})` : 'Disputes';
+    if (!list.length) { $('list').innerHTML = '<p>No disputed games.</p>'; return; }
+    $('list').innerHTML = list.map(d => `<div class="dispute" data-id="${d.id}">
+      <div class="dispute-head">${esc(fmtPlayDate(d.played_on))} · ${d.source === 'sunday' ? `Sunday Doubles, court ${d.court}`
+        : d.kind === 'league' ? `League: ${esc(d.league)}` : 'Casual play'}</div>
+      <div>${esc(d.team1.join(' & '))} vs. ${esc(d.team2.join(' & '))}</div>
+      <div class="status ${d.status === 'developers' ? 'settle' : 'disputed'}">${d.status === 'developers'
+        ? 'Disputed 3 times: needs settling' : `Going back and forth: disputed ${d.disputes} time${d.disputes === 1 ? '' : 's'}`}</div>
+      <div class="muted" style="margin-top:6px">Every score below is shown with ${esc(d.team1.join(' & '))}'s games first.</div>
+      <div class="reason">${d.history.map((h, i) => `${esc(h.by)} ${i ? 'proposed' : 'reported'} <strong>${esc(score(h.sets))}</strong>${
+        h.reason ? `: “${esc(h.reason)}”` : ''} <span class="muted">${esc(fmtDateTime(h.at))}</span>`).join('<br>')}</div>
+      <div class="muted">Current score: <strong>${esc(score(d.sets))}</strong> (${esc(d.team1.join(' & '))} first), from ${esc(d.reported_by)}.
+        ${d.status !== 'developers' && d.waiting_for && d.waiting_for.length ? `Waiting for ${esc(d.waiting_for.join(', '))}.` : ''}</div>
+      <div class="row fix" style="margin-top:8px">
+        <button class="count">Count the current score</button>
+        <label>Or the correct score (${esc(d.team1.join(' & '))} first)
+          <input class="sets" placeholder="e.g. 6-3, 4-6"></label>
+        <button class="secondary count-fixed">Count with this score</button>
+        <button class="danger discard">Don't count it</button>
+      </div>
+    </div>`).join('');
+    document.querySelectorAll('.dispute').forEach(el => {
+      const id = Number(el.dataset.id);
+      el.querySelector('.count').addEventListener('click', () => resolve(id, 'count', null));
+      el.querySelector('.discard').addEventListener('click', () => resolve(id, 'discard', null));
+      el.querySelector('.count-fixed').addEventListener('click', () => {
+        const text = el.querySelector('.sets').value.trim();
+        const sets = text.split(',').map(s => s.trim().match(/^(\d)\s*-\s*(\d)$/));
+        if (!text || sets.some(m => !m)) { showMessage($('msg'), 'Enter the score as sets like 6-3, 4-6.'); return; }
+        resolve(id, 'count', sets.map(m => [Number(m[1]), Number(m[2])]));
+      });
+    });
+  }
+
+  async function resolve(id, action, sets) {
+    showMessage($('msg'), '');
+    try {
+      renderDisputes(await rpc('dev_resolve_rating', { p_result_id: id, p_action: action, p_sets: sets }));
+      data = await rpc('dev_rating_games');
+      renderAll();
+      showMessage($('msg'), action === 'discard' ? 'The result won\'t count.' : 'The result now counts.', 'ok');
+    } catch (err) { showMessage($('msg'), err.message); }
+  }
+
+  start().catch(err => showMessage($('msg'), err.message));
+})();
+</script>
+</body>
+</html>

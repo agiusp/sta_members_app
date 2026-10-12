@@ -34,7 +34,10 @@
     <p class="muted" style="margin-top:0">One row per person, each with their own email address.
       <strong>Membership:</strong> only Active members can use the app; Inactive members see the message set in Settings &gt; App Messages.
       <strong>Sunday Doubles:</strong> only Active members with Yes see the Sunday Doubles pages and get its emails.
-      <strong>App Access</strong> shows whether the member has joined: new members are <em>Pending STA Member App Invitation</em> until you click Send Invite.</p>
+      <strong>App Access</strong> shows whether the member has joined: new members are <em>Pending STA Member App Invitation</em> until you click Send Invite.
+      <strong>Dynamic Level</strong> comes from My Rating: it starts as the member's Level to the nearest 0.5 and moves up or down
+      in 0.5 steps as their results count. It updates by itself; change Level to change its starting point.
+      The Sunday Doubles Scheduler uses the Dynamic Level.</p>
     <details class="upload-box" id="addBox">
       <summary class="panel-title" style="margin:0;cursor:pointer">Add a member</summary>
       <form id="addForm" class="member-form">
@@ -100,12 +103,15 @@
   }
 
   // ---------- Members Table ----------
-  // One row per person: { player_id, first_name, last_name, email, level, sex,
+  // One row per person: { player_id, first_name, last_name, email, level,
+  // dynamic_level (from My Rating, read-only), sex,
   // membership ('active'/'inactive'), sunday_doubles, is_developer,
   // app_access ('yes'/'invited'/'pending'), invited_at }.
   let memberRows = [];
   let editingId = null;
   const fullName = m => `${m.first_name} ${m.last_name}`;
+  const DYNAMIC_NOTE = 'From My Rating: the player\'s Level to the nearest 0.5, moved up or down by their results. ' +
+    'Set automatically; change Level to change the starting point. The Sunday Doubles scheduler uses it.';
 
   async function loadMembers() {
     memberRows = await rpc('dev_members');
@@ -143,7 +149,7 @@
     const sel = (field, value, options) => `<select data-field="${field}" aria-label="${field}">${options.map(([v, label]) =>
       `<option value="${v}" ${String(value) === v ? 'selected' : ''}>${label}</option>`).join('')}</select>`;
     $('members').innerHTML = rows.length ? `<table class="members">
-      <tr><th>Name</th><th>Email</th><th>Membership</th><th>Sunday Doubles</th><th>App Access</th><th>Level</th><th>Sex</th><th>Developer</th><th></th></tr>
+      <tr><th>Name</th><th>Email</th><th>Membership</th><th>Sunday Doubles</th><th>App Access</th><th>Level</th><th title="${esc(DYNAMIC_NOTE)}">Dynamic Level</th><th>Sex</th><th>Developer</th><th></th></tr>
       ${rows.map(m => m.player_id === editingId ? `<tr data-id="${m.player_id}" class="editing">
         <td><input data-edit="first_name" value="${esc(m.first_name)}" aria-label="First name" size="9">
             <input data-edit="last_name" value="${esc(m.last_name)}" aria-label="Last name" size="10"></td>
@@ -152,6 +158,7 @@
         <td>${sel('sunday', m.sunday_doubles, [['true', 'Yes'], ['false', 'No']])}</td>
         <td class="access">${appAccess(m)}</td>
         <td><input data-edit="level" value="${esc(m.level || '')}" aria-label="Level" size="3" placeholder="3.5"></td>
+        <td title="${esc(DYNAMIC_NOTE)}">${esc(m.dynamic_level || '?')}</td>
         <td>${sel('sex', m.sex || '', [['', '?'], ['M', 'M'], ['F', 'F']])}</td>
         <td><input type="checkbox" data-field="developer" ${m.is_developer ? 'checked' : ''} aria-label="Developer"></td>
         <td class="nowrap"><button class="small" data-act="save">Save</button> <button class="secondary small" data-act="cancel">Cancel</button></td>
@@ -162,6 +169,7 @@
         <td>${sel('sunday', m.sunday_doubles, [['true', 'Yes'], ['false', 'No']])}</td>
         <td class="access">${appAccess(m)}</td>
         <td>${esc(m.level || '?')}</td>
+        <td title="${esc(DYNAMIC_NOTE)}">${esc(m.dynamic_level || '?')}</td>
         <td>${esc(m.sex || '?')}</td>
         <td><input type="checkbox" data-field="developer" ${m.is_developer ? 'checked' : ''} aria-label="Developer"></td>
         <td><button class="secondary small" data-act="edit">Edit</button></td>
