@@ -37,7 +37,7 @@
       <strong>App Access</strong> shows whether the member has joined: new members are <em>Pending STA Member App Invitation</em> until you click Send Invite.
       <strong>Dynamic Level</strong> comes from My Rating: it starts as the member's Level to the nearest 0.5 and moves up or down
       in 0.5 steps as their results count. It updates by itself; change Level to change its starting point.
-      The Sunday Doubles Scheduler uses the Dynamic Level.</p>
+      The Sunday Doubles Scheduler uses the Dynamic Level<span id="levelNote"></span>.</p>
     <details class="upload-box" id="addBox">
       <summary class="panel-title" style="margin:0;cursor:pointer">Add a member</summary>
       <form id="addForm" class="member-form">
@@ -94,6 +94,9 @@
 
   async function start() {
     if (!(await STA.initPage())) return;
+    if (!STA.features().rating_on) {
+      $('levelNote').textContent = ' once My Rating is switched on for members (Settings > App settings); until then it uses Level';
+    }
     if (!(await rpc('is_developer'))) {
       showMessage($('guardMsg'), 'This area is for developers only.');
       return;

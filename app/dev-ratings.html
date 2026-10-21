@@ -18,18 +18,24 @@
   .status.counts { color: #1d5e30; } .status.disputed, .status.settle { color: #7a2320; } .status.waiting { color: #6b4511; }
   .league-row input { width: 260px; }
   .standings { margin-bottom: 18px; }
+  a.player { color: inherit; text-decoration: underline dotted; text-underline-offset: 3px; }
+  .hero { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 6px 28px; margin-top: 16px; }
+  .hero-level { font-size: 40px; font-weight: 700; line-height: 1; }
+  .hero-fine { font-size: 18px; font-weight: 600; }
+  .hero-label { font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 6px; }
+  #historyPlayer { min-width: 240px; }
 </style>
 </head>
 <body data-page="Ratings" data-section="dev" data-tab="ratings">
 
 <main class="page">
 <div class="seg" id="views">
-  <button data-view="games" class="active">Games</button><button data-view="leagues">Leagues</button><button data-view="disputes" id="disputesBtn">Disputes</button>
+  <button data-view="games" class="active">Games</button><button data-view="history">Player history</button><button data-view="leagues">Leagues</button><button data-view="disputes" id="disputesBtn">Disputes</button>
 </div>
 
 <section class="panel" id="gamesPanel">
   <p class="muted" style="margin-top:0">Every result: Sunday Doubles Game Reviews and games players reported, with each player's answer.
-    Players' ratings are private and never shown here.</p>
+    Click a player's name to see how their rating changed.</p>
   <div class="row">
     <label>Type <select id="fType"></select></label>
     <label>Status <select id="fStatus">
@@ -42,6 +48,13 @@
   </div>
   <div id="standings" style="margin-top:16px"></div>
   <div id="games" style="margin-top:12px"><p class="muted">Loading…</p></div>
+</section>
+
+<section class="panel" id="historyPanel" hidden>
+  <p class="muted" style="margin-top:0">How a player's rating changed with each result that counts, worked out the same
+    way as on their My Rating page. Players are told on My Rating's "How it works" tab that developers can see this.</p>
+  <div class="row"><label>Player <select id="historyPlayer"><option value="">Choose a player…</option></select></label></div>
+  <div id="history"></div>
 </section>
 
 <section class="panel" id="leaguesPanel" hidden>
@@ -67,12 +80,15 @@
         crossorigin="anonymous"></script>
 <script src="config.js"></script>
 <script src="common.js"></script>
+<script src="rating-chart.js"></script>
 <script>
 (function () {
   const { esc, rpc, fmtDateTime, fmtPlayDate, showMessage } = STA;
   const $ = id => document.getElementById(id);
   const score = sets => sets.map(s => `${s[0]}-${s[1]}`).join(', ');
   const names = side => side.map(p => p.name).join(' & ');
+  // Names that open the player's rating history.
+  const nameLinks = side => side.map(p => `<a class="player" href="?player=${p.id}" data-player="${p.id}">${esc(p.name)}</a>`).join(' &amp; ');
   const mmddyyyy = ymd => { const [y, m, d] = ymd.split('-'); return `${m}-${d}-${y}`; };
   let data = { leagues: [], games: [] };
 
@@ -82,15 +98,28 @@
     ['fType', 'fStatus', 'fFrom', 'fTo'].forEach(id => $(id).addEventListener('change', renderGames));
     $('csvBtn').addEventListener('click', downloadCsv);
     $('addLeague').addEventListener('click', () => saveLeague(null, $('newLeague').value, true));
+    $('historyPlayer').addEventListener('change', () => showHistory($('historyPlayer').value));
+    $('games').addEventListener('click', ev => {
+      const a = ev.target.closest('a[data-player]');
+      if (!a) return;
+      ev.preventDefault();
+      showHistory(a.dataset.player);
+    });
     try {
-      [data] = await Promise.all([rpc('dev_rating_games'), loadDisputes()]);
+      let members;
+      [data, members] = await Promise.all([rpc('dev_rating_games'), rpc('dev_members'), loadDisputes()]);
+      $('historyPlayer').insertAdjacentHTML('beforeend', members.map(m =>
+        `<option value="${m.player_id}">${esc(m.last_name)}, ${esc(m.first_name)}${m.level ? ` (${esc(m.level)})` : ''}</option>`).join(''));
       renderAll();
+      const player = new URLSearchParams(location.search).get('player');
+      if (player) showHistory(player);
     } catch (err) { $('games').innerHTML = ''; showMessage($('msg'), err.message); }
   }
 
   function show(view) {
     document.querySelectorAll('#views button').forEach(b => b.classList.toggle('active', b.dataset.view === view));
     $('gamesPanel').hidden = view !== 'games';
+    $('historyPanel').hidden = view !== 'history';
     $('leaguesPanel').hidden = view !== 'leagues';
     $('disputesPanel').hidden = view !== 'disputes';
     showMessage($('msg'), '');
@@ -144,7 +173,7 @@
         <td class="nowrap">${esc(mmddyyyy(g.played_on))}</td>
         <td>${esc(typeLabel(g))}${g.simulated ? ' <span class="badge none">made up</span>' : ''}</td>
         <td>${g.format === 'singles' ? 'Singles' : 'Doubles'}</td>
-        <td>${esc(names(g.team1))}</td><td>${esc(names(g.team2))}</td>
+        <td>${nameLinks(g.team1)}</td><td>${nameLinks(g.team2)}</td>
         <td class="score">${esc(score(g.sets))}</td>
         <td><span class="status ${statusKey(g)}">${STATUS[statusKey(g)]}</span>
           <div class="answers">${esc(answersText(g))}</div></td>
@@ -185,6 +214,53 @@
     filtered().forEach(g => rows.push([mmddyyyy(g.played_on), typeLabel(g), g.format === 'singles' ? 'Singles' : 'Doubles',
       names(g.team1), names(g.team2), score(g.sets), STATUS[statusKey(g)], answersText(g), g.reported_by]));
     STA.downloadCsv('games.csv', rows);
+  }
+
+  // ---------- Player history ----------
+  const { fine, level, signed } = RatingChart;
+  const pct = x => Math.round(Number(x) * 100) + '%';
+
+  async function showHistory(id) {
+    show('history');
+    $('historyPlayer').value = id || '';
+    history.replaceState(null, '', id ? `?player=${id}` : location.pathname);
+    if (!id) { $('history').innerHTML = ''; return; }
+    $('history').innerHTML = '<p class="muted">Loading…</p>';
+    let h;
+    try { h = await rpc('dev_rating_history', { p_player: Number(id) }); }
+    catch (err) { $('history').innerHTML = ''; showMessage($('msg'), err.message); return; }
+    if ($('historyPlayer').value !== String(id)) return;  // another player was chosen meanwhile
+    const first = h.player.name.split(' ')[0];
+    if (h.player.start == null) {
+      $('history').innerHTML = `<p>${esc(h.player.name)} has no Level in the Members table, so there's no rating to show.</p>`;
+      return;
+    }
+    const rated = h.history.filter(r => r.rated);
+    const side = (r, mine) => mine ? (r.partner ? `${first} & ${r.partner}` : first) : r.opponents.join(' & ');
+    const where = r => r.source === 'sunday' ? 'Sunday Doubles' : r.kind === 'league' ? `League: ${r.league}` : 'Casual play';
+    $('history').innerHTML = `
+      <div class="hero">
+        <div><div class="hero-label">Level</div><div class="hero-level">${level(h.official)}</div></div>
+        <div><div class="hero-label">Rating</div><div class="hero-fine">${fine(h.rating)}</div></div>
+        ${h.played < 5 ? '<span class="badge wait">Provisional</span>' : ''}
+      </div>
+      <p class="muted">Started at ${esc(h.player.level)} (Level in the Members table) · ${h.played} result${h.played === 1 ? '' : 's'} counted</p>
+      ${rated.length ? `<div class="chart-wrap" id="historyChart"></div>
+        <p class="muted">Lines mark the official levels. Hover over or tap the chart to see each result.</p>` : ''}
+      ${h.history.length ? `<div class="table-wrap"><table>
+        <tr><th>Date</th><th>Match</th><th>Score</th><th class="num">Games won</th><th class="num">Expected</th>
+          <th class="num">Change</th><th class="num">Rating</th></tr>
+        ${h.history.slice().reverse().map(r => {
+          const head = `<td class="nowrap">${esc(mmddyyyy(r.played_on))}<div class="answers">${esc(where(r))}</div></td>
+            <td>${esc(side(r, true))} vs. ${esc(side(r, false))}</td><td class="score">${esc(score(r.sets))}</td>`;
+          if (!r.rated) return `<tr>${head}<td colspan="4" class="muted">Not rated: a player in this match has no Level.</td></tr>`;
+          const moved = Number(r.official_after) !== Number(r.official_before);
+          return `<tr>${head}<td class="num">${pct(r.actual)}</td><td class="num">${pct(r.expected)}</td>
+            <td class="num ${r.change >= 0 ? 'up' : 'down'}">${signed(r.change)}</td>
+            <td class="num">${fine(r.rating_after)}${moved ? ` <strong>→ ${level(r.official_after)}</strong>` : ''}</td></tr>`;
+        }).join('')}
+      </table></div>` : '<p>No results count for this player yet.</p>'}`;
+    if (rated.length) RatingChart.draw($('historyChart'), h, 'Level in the Members table');
   }
 
   // ---------- Leagues ----------

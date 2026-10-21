@@ -72,7 +72,7 @@ console.log(`Demo Sunday ${SUNDAY}; clock set to Thursday ${addDays(SUNDAY, -3)}
 // ---------- Settings ----------
 await patch('settings', 'id=eq.true', {
   demo: true, test_mode: true, test_clock: CLOCK, dev_two_step: false,
-  contact_emails: ['dev@example.com'],
+  contact_emails: ['dev@example.com'], backup_email: 'organizers@example.com',
 });
 
 // ---------- Members (the made-up players from supabase/seed.sql) ----------

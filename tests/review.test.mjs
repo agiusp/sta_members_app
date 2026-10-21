@@ -170,7 +170,9 @@ await check('the next play-invite asks only members who played to review their g
 });
 
 await check('reviews close the next Sunday at 9am', async () => {
-  await setClock(at(sunday(9), 7 * 24 * hour));
+  // An hour past 9am a week later, so it's after 9am even when daylight
+  // saving time ends that week (7 x 24 hours would land on 8am).
+  await setClock(at(sunday(9), 7 * 24 * hour + hour));
   const r = await rpcOk(m.alice, 'my_review');
   assert.equal(r.open, false);
   await rpcFails(m.alice, 'submit_review', { p_enjoyment: 4, p_player_id: alice, p_sets: [{ partner_id: others[0], my_games: 6, their_games: 1 }] },

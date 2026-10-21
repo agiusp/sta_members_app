@@ -81,6 +81,10 @@ window.STA = (function () {
     { key: 'inactive', group: 'Access', name: 'Membership not renewed (Inactive members)',
       where: 'Every page, for members marked Inactive in the Members table',
       text: "Our records show that your STA membership has not been renewed for this year. Please pay your membership dues, and your access to the STA Members App will be restored." },
+    { key: 'feature_off', group: 'Access', name: 'Not available yet (Casual Play, My Rating)',
+      where: 'The Casual Play and My Rating pages, while they are switched off for members (Settings > App settings)',
+      text: '{{feature}} isn\'t available yet. Watch the News page for when it opens.',
+      placeholders: { feature: '"Casual Play" or "My Rating"' } },
     { key: 'not_sunday', group: 'Access', name: 'Not approved for Sunday Doubles',
       where: 'The Sunday Doubles pages, for members with Sunday Doubles = No',
       text: 'Sunday Doubles is for advanced players approved by the Sunday Doubles program manager. If you would like to join, please contact the program manager.' },
@@ -145,6 +149,8 @@ window.STA = (function () {
   // ---------- Site header: logo, app name, navigation ----------
   // Every page has the same header. A page says where it belongs with
   // <body data-section="sunday" data-tab="courts">, and calls STA.initPage().
+  // feature: a section developers can switch off for members (Settings > App
+  // settings); developers always see it.
   const DEFAULT_LOGO = 'img/sta-logo.png';
   const SECTIONS = [
     { key: 'news', label: 'News', href: 'news.html' },
@@ -152,8 +158,8 @@ window.STA = (function () {
       { key: 'signup', label: 'Sign-up', href: 'signup.html' },
       { key: 'courts', label: 'Court Assignments', href: 'courts.html' },
       { key: 'review', label: 'Game Review', href: 'review.html' }] },
-    { key: 'casual', label: 'Casual Play', href: 'casual.html' },
-    { key: 'rating', label: 'My Rating', href: 'rating.html', tabs: [
+    { key: 'casual', label: 'Casual Play', href: 'casual.html', feature: 'casual_on' },
+    { key: 'rating', label: 'My Rating', href: 'rating.html', feature: 'rating_on', tabs: [
       { key: 'rating', label: 'My Rating', href: 'rating.html' },
       { key: 'report', label: 'Report a game', href: 'rating-report.html' },
       { key: 'how', label: 'How it works', href: 'rating-how.html' }] },
@@ -171,6 +177,7 @@ window.STA = (function () {
   let isDev = false;
   let isSunday = false;   // approved for Sunday Doubles
   let isMember = true;    // Active member (Inactive members see only the dues message)
+  let features = { casual_on: true, rating_on: true };  // switched on for members
 
   // "STA - STA Members App" shows as "STA" with "STA Members App" under it.
   function splitName(name) {
@@ -197,7 +204,8 @@ window.STA = (function () {
       header.className = 'site-header';
       document.body.insertBefore(header, document.body.firstChild);
     }
-    let links = who && isMember ? SECTIONS.filter(s => (!s.devOnly || isDev) && (!s.sundayOnly || isSunday)).map(s =>
+    let links = who && isMember ? SECTIONS.filter(s => (!s.devOnly || isDev) && (!s.sundayOnly || isSunday) &&
+                                                     (!s.feature || isDev || features[s.feature])).map(s =>
       `<a href="${s.href}"${s.key === section ? ' class="active" aria-current="page"' : ''}>${esc(s.label)}</a>`).join('') : '';
     if (who && isMember && b.demo) links += `<a href="demo-inbox.html"${section === 'demo' ? ' class="active" aria-current="page"' : ''}>Demo inbox</a>`;
     const demoStrip = b.demo
@@ -228,7 +236,10 @@ window.STA = (function () {
         main.insertBefore(head, main.firstChild);
       }
       head.innerHTML = `<h1>${esc(s.label)}</h1>` + (s.tabs ? `<nav class="tabs" aria-label="${esc(s.label)}">${s.tabs.map(t =>
-        `<a href="${t.href}"${t.key === tab ? ' class="active" aria-current="page"' : ''}>${esc(t.label)}</a>`).join('')}</nav>` : '');
+        `<a href="${t.href}"${t.key === tab ? ' class="active" aria-current="page"' : ''}>${esc(t.label)}</a>`).join('')}</nav>` : '') +
+        (s.feature && isDev && features[s.feature] === false
+          ? `<div class="msg info">Members don't see ${esc(s.label)} yet: it's switched off for them in
+              <a href="settings.html">Developers &gt; Settings &gt; App settings</a>. Developers still see it.</div>` : '');
     }
 
     document.querySelectorAll('.program-name').forEach(el => { el.textContent = b.program_name; });
@@ -278,7 +289,10 @@ window.STA = (function () {
     // can do what. Remembered for this browser tab so it doesn't flicker.
     try {
       const c = JSON.parse(sessionStorage.getItem(ACCESS_CACHE) || 'null');
-      if (c && c.user === session.user.id) ({ developer: isDev, sunday_doubles: isSunday, member: isMember } = c);
+      if (c && c.user === session.user.id) {
+        ({ developer: isDev, sunday_doubles: isSunday, member: isMember } = c);
+        if (c.features) features = c.features;
+      }
     } catch (_) { /* storage blocked */ }
     renderHeader();
     const { data: access } = await client.rpc('my_access');
@@ -286,7 +300,8 @@ window.STA = (function () {
     isMember = me.member === true;
     isDev = isMember && me.developer === true;
     isSunday = isMember && me.sunday_doubles === true;
-    try { sessionStorage.setItem(ACCESS_CACHE, JSON.stringify({ user: session.user.id, developer: isDev, sunday_doubles: isSunday, member: isMember })); }
+    features = { casual_on: me.casual_on !== false, rating_on: me.rating_on !== false };
+    try { sessionStorage.setItem(ACCESS_CACHE, JSON.stringify({ user: session.user.id, developer: isDev, sunday_doubles: isSunday, member: isMember, features })); }
     catch (_) { /* storage blocked */ }
     renderHeader();
     const section = document.body.dataset.section;
@@ -298,6 +313,12 @@ window.STA = (function () {
     }
     if (section === 'sunday' && !isSunday) {
       blockPage('Sunday Doubles', msg('not_sunday'));
+      await branding;
+      return null;
+    }
+    const s = SECTIONS.find(x => x.key === section);
+    if (s && s.feature && !features[s.feature] && !isDev) {
+      blockPage(s.label, msg('feature_off', { feature: esc(s.label) }));
       await branding;
       return null;
     }
@@ -373,7 +394,7 @@ window.STA = (function () {
     return 1.05 / (0.2126 * r + 0.7152 * g + 0.0722 * b + 0.05);
   }
 
-  return { client, authLinkType, authLinkError, TZ, fmtDateTime, fmtPlayDate, esc, rpc, showMessage,
+  return { client, authLinkType, authLinkError, TZ, features: () => features, fmtDateTime, fmtPlayDate, esc, rpc, showMessage,
            addPasswordToggles, parseDelimited, downloadCsv, applyBranding, showBranding, branding: () => brand, initPage, signOut, showTestClock, splitName,
            contrastWithWhite, DEFAULT_LOGO, MESSAGES, msg, msgText, messagesLoaded, messageEdits: () => messageEdits };
 })();

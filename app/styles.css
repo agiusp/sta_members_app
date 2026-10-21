@@ -117,6 +117,8 @@ a.link-button { font-size: 13px; color: var(--accent); cursor: pointer; }
 .msg { padding: 10px 12px; border-radius: 6px; font-size: 13px; margin-top: 10px; }
 .msg.error { background: var(--red-bg); border: 1px solid var(--red-border); color: #7a2320; }
 .msg.ok { background: var(--green-bg); border: 1px solid var(--green-border); color: #1d5e30; }
+.msg.info { background: var(--amber-bg); border: 1px solid var(--amber-border); color: #6b4511; margin: 0 0 14px; }
+.msg.info a { color: inherit; }
 .test-banner {
   background: var(--amber-bg);
   border: 1px solid var(--amber-border);
@@ -167,3 +169,11 @@ tr.waitlist td { background: #fffaf0; }
   button { min-height: 44px; }
   form.stack { max-width: none; }
 }
+
+/* The rating chart (rating-chart.js) and rating changes. */
+.chart-wrap { position: relative; margin-top: 8px; }
+.chart-wrap svg { display: block; width: 100%; height: auto; touch-action: pan-y; }
+.chart-wrap .tip { position: absolute; pointer-events: none; background: #fff; border: 1px solid #d5d9de; border-radius: 6px;
+  padding: 7px 9px; font-size: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); white-space: nowrap; }
+.chart-wrap .tip strong { font-size: 13px; }
+.up { color: #1d5e30; } .down { color: #7a2320; }

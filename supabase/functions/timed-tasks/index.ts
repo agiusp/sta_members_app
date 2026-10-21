@@ -1,15 +1,18 @@
 // Runs whatever timed task is due and sends its emails: the Monday
 // play-invite, "off the waitlist" emails, the Saturday developer emails, the
-// player emails at the publish time, and Casual Play game emails. Safe to call as often as you like:
+// player emails at the publish time, Casual Play game emails, and the weekly
+// backup email (Settings > App settings). Safe to call as often as you like:
 // the database hands out each task only once. When things happen is set in
 // the app (Developers > Settings), and so is the wording.
 //
-// Online, a scheduler calls this every minute with the service role key.
+// Online, pg_cron calls this every minute with the project's secret key
+// (run_timed_tasks in the database).
 // Developers can also trigger it (locally, the "Run timed tasks now" button).
 // deno-lint-ignore-file no-explicit-any
 import { createClient } from "npm:@supabase/supabase-js@2.117.2";
 import * as E from "../_shared/emails.ts";
-import { sendEmail } from "../_shared/send-email.ts";
+import { zipSync, strToU8 } from "npm:fflate@0.8.2";
+import { sendDelayMs, sendEmail } from "../_shared/send-email.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -157,7 +160,6 @@ Deno.serve(async (req) => {
   const tasks = casual.length ? [...weekTasks, { kind: "casual_games", session_id: null, emails: casual }] : weekTasks;
 
   const appUrl = Deno.env.get("APP_URL") ?? "http://127.0.0.1:3000/app/";
-  const throttle = Deno.env.get("RESEND_API_KEY") ? 600 : 0; // stay under the provider's rate limit
   let sent = 0;
   const failed: string[] = [];
   const templates = tasks.length ? await E.loadTemplates(admin) : new Map();
@@ -186,8 +188,34 @@ Deno.serve(async (req) => {
         session_id: task.session_id, kind: out.kind, to_email: out.to,
         subject: out.email.subject, error: err,
       });
-      if (throttle) await new Promise((r) => setTimeout(r, throttle));
+      if (sendDelayMs) await new Promise((r) => setTimeout(r, sendDelayMs));
     }
   }
-  return reply({ tasks: tasks.map((t: any) => t.kind), sent, failed });
+
+  // The weekly backup (or one a developer asked for), as a zipped JSON file.
+  const ran = tasks.map((t: any) => t.kind);
+  const { data: backup, error: backupError } = await admin.rpc("claim_backup");
+  if (backupError) failed.push(`backup: ${backupError.message}`);
+  if (backup) {
+    ran.push("backup");
+    const day = String(backup.made_at).slice(0, 10);
+    const name = `backup-${day}`;
+    const zip = zipSync({ [`${name}.json`]: strToU8(JSON.stringify(backup.data)) });
+    const subject = `${programName}: backup of ${day}`;
+    let err: string | null = null;
+    try {
+      await sendEmail(backup.to, subject,
+        `Attached is a backup of everything in ${programName}: members, sign-ups, courts, reviews, ratings, ` +
+        `news and settings, as of ${E.timeLabel(backup.made_at)}.\n\n` +
+        `It holds members' names and email addresses, so keep this email private. Keep the last few backups; ` +
+        `older ones can be deleted.\n\nTo restore it, see "Backups" in DEVELOPING.md, in the app's code.`,
+        programName, [{ name: `${name}.zip`, content: zip }]);
+      sent++;
+    } catch (e) {
+      err = String(e instanceof Error ? e.message : e);
+      failed.push(err);
+    }
+    await admin.from("email_log").insert({ kind: "backup", to_email: backup.to, subject, error: err });
+  }
+  return reply({ tasks: ran, sent, failed });
 });

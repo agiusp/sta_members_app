@@ -94,6 +94,40 @@
   </section>
 
   <section class="panel">
+    <div class="panel-title">Features members see</div>
+    <p class="muted">Switch a feature Off to hide it from members while they get used to the app: it leaves their menu, and its
+      pages show the "Not available yet" message (App Messages). Developers always see both, to try them out.
+      While My Rating is Off, the Sunday Doubles Scheduler uses each player's Level instead of their Dynamic Level, because
+      players can't yet see or dispute their results. Sunday Game Reviews still record scores, so ratings are ready when it's switched On.</p>
+    <div class="row">
+      <strong style="font-size:14px">On for members:</strong>
+      <label class="check"><input type="checkbox" id="featCasual"> Casual Play</label>
+      <label class="check"><input type="checkbox" id="featRating"> My Rating</label>
+      <button id="saveFeaturesBtn">Save</button>
+    </div>
+    <div id="featuresMsg"></div>
+  </section>
+
+  <section class="panel">
+    <div class="panel-title">Backups</div>
+    <p class="muted">Every Monday at 2am (US Eastern) the app emails a backup of everything in it (members, sign-ups, courts,
+      reviews, ratings, news and settings) to this address, as a zip file. Use a private club address that several
+      organizers can reach, since the backup holds members' names and email addresses. Leave it empty for no backup emails.
+      "Download a backup" saves the same backup from this browser at any time. DEVELOPING.md explains how to restore one.</p>
+    <div class="row">
+      <label style="flex:1; min-width:240px">Send the weekly backup to
+        <input id="backupEmail" type="email" maxlength="200" placeholder="e.g. the club's organizers' address"></label>
+      <button id="saveBackupBtn">Save</button>
+    </div>
+    <p class="muted" id="backupStatus"></p>
+    <div class="row">
+      <button class="secondary" id="backupNowBtn">Email a backup now</button>
+      <button class="secondary" id="downloadBackupBtn">Download a backup</button>
+    </div>
+    <div id="backupMsg"></div>
+  </section>
+
+  <section class="panel">
     <div class="panel-title">Invitation email</div>
     <p class="muted">Sent when a developer clicks Send Invite in the Members table. It can't be switched off: it's how members join the app.</p>
     <div class="email-list" data-group="app"></div>
@@ -213,7 +247,7 @@
     myEmail = session.user.email;
     if (!(await rpc('is_developer'))) { showMessage($('guardMsg'), 'This area is for developers only.'); return; }
     await loadBranding();
-    await Promise.all([load(), loadCasual()]);
+    await Promise.all([load(), loadCasual(), loadAppSettings()]);
     renderMessages();
     $('editView').hidden = false;
     const [pane, sub] = location.hash.slice(1).split('-');
@@ -301,6 +335,58 @@
       await rpc('dev_save_casual_settings', { p_email_delay_minutes: Number($('casualDelay').value) });
       showMessage($('casualMsg'), 'Saved. It applies to the next emails.', 'ok');
     } catch (err) { showMessage($('casualMsg'), err.message); }
+  });
+
+  // ---------- App settings: features members see, backups ----------
+  function renderAppSettings(a) {
+    $('featCasual').checked = a.casual_on;
+    $('featRating').checked = a.rating_on;
+    $('backupEmail').value = a.backup_email || '';
+    $('backupStatus').textContent = !a.backup_email ? 'Backup emails are off.'
+      : (a.backup_sent_at ? `Last backup email: ${fmtDateTime(a.backup_sent_at)}${a.backup_error ? ' (it failed: ' + a.backup_error + ')' : ''}.`
+                          : 'No backup emailed yet.') +
+        (a.backup_requested ? ' A backup will be emailed within a minute.' : '');
+  }
+  async function loadAppSettings() { renderAppSettings(await rpc('dev_app_settings')); }
+
+  $('saveFeaturesBtn').addEventListener('click', async () => {
+    try {
+      renderAppSettings(await rpc('dev_save_features', { p_casual: $('featCasual').checked, p_rating: $('featRating').checked }));
+      try { sessionStorage.removeItem('sta-access'); } catch (_) { /* storage blocked */ }
+      showMessage($('featuresMsg'), 'Saved. Members see the change the next time they load a page.', 'ok');
+    } catch (err) { showMessage($('featuresMsg'), err.message); }
+  });
+  $('saveBackupBtn').addEventListener('click', async () => {
+    try {
+      renderAppSettings(await rpc('dev_save_backup_email', { p_email: $('backupEmail').value }));
+      showMessage($('backupMsg'), 'Saved.', 'ok');
+    } catch (err) { showMessage($('backupMsg'), err.message); }
+  });
+  $('backupNowBtn').addEventListener('click', async () => {
+    showMessage($('backupMsg'), '');
+    try {
+      renderAppSettings(await rpc('dev_request_backup'));
+      // Send it straight away rather than waiting for the next timed run.
+      const { data, error } = await client.functions.invoke('timed-tasks', { body: {} });
+      if (error) throw new Error(error.message);
+      await loadAppSettings();
+      showMessage($('backupMsg'), data.failed.length ? 'The backup email failed: ' + data.failed.join('; ')
+        : `Backup emailed to ${$('backupEmail').value}.`, data.failed.length ? 'error' : 'ok');
+    } catch (err) { showMessage($('backupMsg'), err.message); }
+  });
+  $('downloadBackupBtn').addEventListener('click', async () => {
+    showMessage($('backupMsg'), '');
+    try {
+      const backup = await rpc('dev_backup');
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(new Blob([JSON.stringify(backup)], { type: 'application/json' }));
+      a.download = `backup-${new Date().toISOString().slice(0, 10)}.json`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+      showMessage($('backupMsg'), 'Downloaded. It holds members\' names and email addresses: keep it somewhere private.', 'ok');
+    } catch (err) { showMessage($('backupMsg'), err.message); }
   });
 
   // ---------- Settings: program name, color, logo ----------
