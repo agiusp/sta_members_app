@@ -209,7 +209,7 @@
       </div>
       <p class="bounds">Your level goes up to <strong>${level(o + 0.5)}</strong> when your rating reaches
         <strong>${fine(o + 0.35)}</strong>${o > 1 ? `, and down to <strong>${level(o - 0.5)}</strong> if it falls below <strong>${fine(o - 0.35)}</strong>` : ''}.</p>
-      <p class="muted">Started at ${esc(data.player.level)} (your level in the club's Members table) ·
+      <p class="muted">Started at ${esc(data.player.start_level)} (your level in the club's Members table when your rating began) ·
         ${data.played} result${data.played === 1 ? '' : 's'} counted${provisional ? ' · provisional until 5 results' : ''} ·
         <a href="rating-how.html">How it works</a></p>
     </section>`;

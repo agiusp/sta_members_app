@@ -18,6 +18,7 @@ assert.equal((await inviteAsDeveloper(dev, 'alice.johnson@example.com')).status,
 const alice = await acceptInvite('alice.johnson@example.com', PW);
 const members = await rpcOk(dev, 'dev_members');
 const devPlayer = members.find(m => m.email === 'dev@example.com');
+const t = {};   // tokens of Bob, Carol and David
 
 console.log('Switching features off');
 await check('Casual Play and My Rating are on by default, and my_access says so', async () => {
@@ -50,7 +51,6 @@ await check('while My Rating is off, the Scheduler uses Level instead of Dynamic
   await rpcOk(dev, 'dev_simulate_signups', { p_count: 50 });
   // Alice and Bob win 4 games 6-0, 6-0, 6-0, all confirmed: Bob's Dynamic
   // Level goes up a step.
-  const t = {};
   for (const name of ['bob.smith', 'carol.lee', 'david.kim']) {
     assert.equal((await inviteAsDeveloper(dev, `${name}@example.com`)).status, 200);
     t[name] = await acceptInvite(`${name}@example.com`, PW);
@@ -76,6 +76,33 @@ await check('while My Rating is off, the Scheduler uses Level instead of Dynamic
   await rpcOk(dev, 'dev_save_features', { p_casual: false, p_rating: true });
   assert.equal(await level(), '4.0', 'My Rating on: Dynamic Level');
   await rpcOk(dev, 'dev_save_features', { p_casual: true, p_rating: true });
+});
+
+console.log('Copying Dynamic Level into Level');
+await check('a preview lists who would change; only developers can copy', async () => {
+  await rpcFails(alice, 'dev_copy_dynamic_levels', { p_apply: false }, /eveloper/);
+  const r = await rpcOk(dev, 'dev_copy_dynamic_levels', { p_apply: false });
+  const bob = r.changes.find(c => c.name === 'Bob Smith');
+  assert.deepEqual([bob.level, bob.dynamic_level], ['3.5', '4.0']);
+  assert.equal(r.copied_at, null, 'nothing copied yet');
+  assert.equal((await rpcOk(dev, 'dev_members')).find(m => m.player_id === bob.player_id).level, '3.5');
+});
+
+await check('copying changes Level but no rating; editing a Level by hand restarts that rating', async () => {
+  const before = await rpcOk(t['bob.smith'], 'my_rating');
+  const r = await rpcOk(dev, 'dev_copy_dynamic_levels', { p_apply: true });
+  assert.ok(r.copied_at);
+  assert.equal((await rpcOk(dev, 'dev_copy_dynamic_levels', { p_apply: false })).changes.length, 0, 'all match now');
+  const bob = (await rpcOk(dev, 'dev_members')).find(m => m.email === 'bob.smith@example.com');
+  assert.deepEqual([bob.level, bob.dynamic_level], ['4.0', '4.0']);
+  const after = await rpcOk(t['bob.smith'], 'my_rating');
+  for (const k of ['rating', 'official', 'played', 'history']) assert.deepEqual(after[k], before[k], k);
+  assert.deepEqual([after.player.level, after.player.start_level], ['4.0', '3.5']);
+  await rpcOk(dev, 'dev_save_member', { p_player_id: bob.player_id, p_first_name: bob.first_name, p_last_name: bob.last_name,
+    p_email: bob.email, p_level: '3.0', p_sex: bob.sex, p_active: true, p_sunday_doubles: bob.sunday_doubles, p_developer: false });
+  const restarted = await rpcOk(t['bob.smith'], 'my_rating');
+  assert.equal(restarted.player.start_level, '3.0');
+  assert.ok(Number(restarted.rating) < Number(before.rating), 'rating worked out again from 3.0');
 });
 
 console.log('Player history (Developers > Ratings)');

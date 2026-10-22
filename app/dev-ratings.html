@@ -244,7 +244,7 @@
         <div><div class="hero-label">Rating</div><div class="hero-fine">${fine(h.rating)}</div></div>
         ${h.played < 5 ? '<span class="badge wait">Provisional</span>' : ''}
       </div>
-      <p class="muted">Started at ${esc(h.player.level)} (Level in the Members table) · ${h.played} result${h.played === 1 ? '' : 's'} counted</p>
+      <p class="muted">Started at ${esc(h.player.start_level)} (Level in the Members table when the rating began${h.player.start_level !== h.player.level ? `; Level is now ${esc(h.player.level)}` : ''}) · ${h.played} result${h.played === 1 ? '' : 's'} counted</p>
       ${rated.length ? `<div class="chart-wrap" id="historyChart"></div>
         <p class="muted">Lines mark the official levels. Hover over or tap the chart to see each result.</p>` : ''}
       ${h.history.length ? `<div class="table-wrap"><table>

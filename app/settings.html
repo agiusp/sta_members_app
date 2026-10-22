@@ -109,6 +109,22 @@
     <div id="featuresMsg"></div>
   </section>
 
+  <section class="panel" id="levelsPanel">
+    <div class="panel-title">Copy Dynamic Level into Level</div>
+    <p class="muted">Updates the Level column of the Members table to each member's Dynamic Level from their rating.
+      <strong>We recommend doing this once a season: at the end of a season, or before the next one starts</strong>, so levels
+      don't change in the middle of a season. Nobody's rating changes: ratings keep their history and carry on from where they are.
+      Level is what Casual Play uses, and what the Scheduler uses whenever Ratings are switched off.
+      (Changing a member's Level by hand in the Members table still restarts their rating from that level.)</p>
+    <div class="row">
+      <button class="secondary" id="levelsPreviewBtn">Show what would change</button>
+      <button id="levelsCopyBtn" hidden>Copy Dynamic Level into Level for these members</button>
+    </div>
+    <p class="muted" id="levelsCopied"></p>
+    <div id="levelsList"></div>
+    <div id="levelsMsg"></div>
+  </section>
+
   <section class="panel">
     <div class="panel-title">Backups</div>
     <p class="muted">Every Monday at 2am (US Eastern) the app emails a backup of everything in it (members, sign-ups, courts,
@@ -341,6 +357,7 @@
   // ---------- App settings: features on or off, backups ----------
   function renderAppSettings(a) {
     document.querySelector('[data-pane="casual"]').hidden = !a.casual_on;
+    $('levelsPanel').hidden = !a.rating_on;   // Dynamic Level comes from Ratings
     $('featCasual').checked = a.casual_on;
     $('featRating').checked = a.rating_on;
     $('backupEmail').value = a.backup_email || '';
@@ -359,6 +376,28 @@
       setTimeout(() => location.reload(), 1200);  // the menu and these tabs change too
     } catch (err) { showMessage($('featuresMsg'), err.message); }
   });
+  // ---------- Copy Dynamic Level into Level ----------
+  async function copyLevels(apply) {
+    showMessage($('levelsMsg'), '');
+    try {
+      const r = await rpc('dev_copy_dynamic_levels', { p_apply: apply });
+      $('levelsCopied').textContent = r.copied_at ? `Last copied: ${fmtDateTime(r.copied_at)}.` : '';
+      if (apply) {
+        $('levelsList').innerHTML = '';
+        $('levelsCopyBtn').hidden = true;
+        showMessage($('levelsMsg'), `Done: ${r.changes.length} member${r.changes.length === 1 ? '\'s' : 's\''} Level now matches their Dynamic Level.`, 'ok');
+        return;
+      }
+      $('levelsCopyBtn').hidden = !r.changes.length;
+      $('levelsList').innerHTML = r.changes.length ? `<div class="table-wrap" style="margin-top:12px"><table>
+          <tr><th>Member</th><th>Level now</th><th>Dynamic Level (new Level)</th></tr>
+          ${r.changes.map(c => `<tr><td>${esc(c.name)}</td><td>${esc(c.level || '?')}</td><td><strong>${esc(c.dynamic_level)}</strong></td></tr>`).join('')}
+        </table></div>` : '<p>Every member\'s Level already matches their Dynamic Level.</p>';
+    } catch (err) { showMessage($('levelsMsg'), err.message); }
+  }
+  $('levelsPreviewBtn').addEventListener('click', () => copyLevels(false));
+  $('levelsCopyBtn').addEventListener('click', () => copyLevels(true));
+
   $('saveBackupBtn').addEventListener('click', async () => {
     try {
       renderAppSettings(await rpc('dev_save_backup_email', { p_email: $('backupEmail').value }));

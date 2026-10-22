@@ -327,7 +327,7 @@ Alice Johnson would like to set it up, but you don&#x27;t share your contact inf
   <img src="img/d-twostep.webp" alt="Two-step sign-in setup" loading="lazy"></figure></div>
 </section>
 <section class="slide split">
-  <div class="text"><div class="kicker">Developers · Members</div><h2>The Members Table</h2><ul><li>One row per person: Name, Email, <b>Membership</b> (Active or Inactive), <b>Sunday Doubles</b> (Yes or No) and <b>App Access</b>, plus level, sex and developer.</li><li><b>Dynamic Level</b> comes from My Rating: it starts as the member's Level and moves in 0.5 steps as their results count. The Sunday Scheduler uses it.</li><li>Change Membership or Sunday Doubles right in the table. Inactive members are locked out until marked Active again.</li><li>App Access shows who has joined: new members are "Pending STA Member App Invitation" until a developer clicks Send Invite.</li></ul></div>
+  <div class="text"><div class="kicker">Developers · Members</div><h2>The Members Table</h2><ul><li>One row per person: Name, Email, <b>Membership</b> (Active or Inactive), <b>Sunday Doubles</b> (Yes or No) and <b>App Access</b>, plus level, sex and developer.</li><li><b>Dynamic Level</b> comes from My Rating: it starts as the member's Level and moves in 0.5 steps as their results count. The Sunday Scheduler uses it. Once a season, one button in Settings copies it into Level, without changing anyone's rating.</li><li>Change Membership or Sunday Doubles right in the table. Inactive members are locked out until marked Active again.</li><li>App Access shows who has joined: new members are "Pending STA Member App Invitation" until a developer clicks Send Invite.</li></ul></div>
   <div class="visual"><figure class="browser"><div class="bar"><i></i><i></i><i></i><span>agiusp.github.io/sta_members_app/app/</span></div>
   <img src="img/d-members.webp" alt="The Members Table" loading="lazy"></figure></div>
 </section>
@@ -397,6 +397,11 @@ Alice Johnson would like to set it up, but you don&#x27;t share your contact inf
   <div class="text"><div class="kicker">Developers · Settings · App settings</div><h2>Start with Sunday Doubles, add the rest later</h2><ul><li>Casual Play and Ratings can each be switched off entirely, so the club can launch with Sunday Doubles alone and roll the others out when it's ready.</li><li>Off means gone from the menu for everyone, with no emails. Sunday Game Reviews keep recording scores, so ratings are ready on day one.</li><li><b>Backups:</b> every Monday the app emails a backup of everything to a private club address, and a developer can download one at any time.</li></ul></div>
   <div class="visual"><figure class="browser"><div class="bar"><i></i><i></i><i></i><span>agiusp.github.io/sta_members_app/app/</span></div>
   <img src="img/d-features-backups.webp" alt="Switching features on or off, and backups" loading="lazy"></figure></div>
+</section>
+<section class="slide split">
+  <div class="text"><div class="kicker">Developers · Settings · App settings</div><h2>Once a season: update Levels from ratings</h2><ul><li>One button copies each member's Dynamic Level (from their rating) into the Level column of the Members table.</li><li>It first shows exactly whose Level would change.</li><li>Best done at the end of a season or before the next one, so levels don't change mid-season. Nobody's rating moves: ratings keep their history and carry on.</li></ul></div>
+  <div class="visual"><figure class="browser"><div class="bar"><i></i><i></i><i></i><span>agiusp.github.io/sta_members_app/app/</span></div>
+  <img src="img/d-copy-levels.webp" alt="Copying Dynamic Level into Level" loading="lazy"></figure></div>
 </section>
 <section class="slide split">
   <div class="text"><div class="kicker">Developers · Settings · Sunday Doubles</div><h2>Every email can be edited, or switched off</h2><ul><li>Each email shows when it is sent and to whom, with an On/Off switch (On unless a developer switches it off).</li><li>Change the wording, preview it with sample details, or reset to the original. All emails can be printed as one document for review.</li></ul></div>
