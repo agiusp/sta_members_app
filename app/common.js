@@ -82,7 +82,7 @@ window.STA = (function () {
       where: 'Every page, for members marked Inactive in the Members table',
       text: "Our records show that your STA membership has not been renewed for this year. Please pay your membership dues, and your access to the STA Members App will be restored." },
     { key: 'feature_off', group: 'Access', name: 'Not available yet (Casual Play, My Rating)',
-      where: 'The Casual Play and My Rating pages, while they are switched off for members (Settings > App settings)',
+      where: 'The Casual Play and My Rating pages, if someone opens one from an old link while it is switched off (Settings > App settings)',
       text: '{{feature}} isn\'t available yet. Watch the News page for when it opens.',
       placeholders: { feature: '"Casual Play" or "My Rating"' } },
     { key: 'not_sunday', group: 'Access', name: 'Not approved for Sunday Doubles',
@@ -149,8 +149,8 @@ window.STA = (function () {
   // ---------- Site header: logo, app name, navigation ----------
   // Every page has the same header. A page says where it belongs with
   // <body data-section="sunday" data-tab="courts">, and calls STA.initPage().
-  // feature: a section developers can switch off for members (Settings > App
-  // settings); developers always see it.
+  // feature: a section (or tab) developers can switch off for everyone,
+  // developers included (Settings > App settings).
   const DEFAULT_LOGO = 'img/sta-logo.png';
   const SECTIONS = [
     { key: 'news', label: 'News', href: 'news.html' },
@@ -167,7 +167,7 @@ window.STA = (function () {
       { key: 'members', label: 'Members', href: 'members.html' },
       { key: 'sunday', label: 'Sunday Program', href: 'developer.html' },
       { key: 'scheduler', label: 'Scheduler', href: 'scheduler.html' },
-      { key: 'ratings', label: 'Ratings', href: 'dev-ratings.html' },
+      { key: 'ratings', label: 'Ratings', href: 'dev-ratings.html', feature: 'rating_on' },
       { key: 'settings', label: 'Settings', href: 'settings.html' }] }
   ];
   const BRAND_CACHE = 'sta-branding';
@@ -177,7 +177,7 @@ window.STA = (function () {
   let isDev = false;
   let isSunday = false;   // approved for Sunday Doubles
   let isMember = true;    // Active member (Inactive members see only the dues message)
-  let features = { casual_on: true, rating_on: true };  // switched on for members
+  let features = { casual_on: true, rating_on: true };  // switched on (Settings > App settings)
 
   // "STA - STA Members App" shows as "STA" with "STA Members App" under it.
   function splitName(name) {
@@ -205,7 +205,7 @@ window.STA = (function () {
       document.body.insertBefore(header, document.body.firstChild);
     }
     let links = who && isMember ? SECTIONS.filter(s => (!s.devOnly || isDev) && (!s.sundayOnly || isSunday) &&
-                                                     (!s.feature || isDev || features[s.feature])).map(s =>
+                                                     (!s.feature || features[s.feature])).map(s =>
       `<a href="${s.href}"${s.key === section ? ' class="active" aria-current="page"' : ''}>${esc(s.label)}</a>`).join('') : '';
     if (who && isMember && b.demo) links += `<a href="demo-inbox.html"${section === 'demo' ? ' class="active" aria-current="page"' : ''}>Demo inbox</a>`;
     const demoStrip = b.demo
@@ -235,11 +235,9 @@ window.STA = (function () {
         head.className = 'section-head';
         main.insertBefore(head, main.firstChild);
       }
-      head.innerHTML = `<h1>${esc(s.label)}</h1>` + (s.tabs ? `<nav class="tabs" aria-label="${esc(s.label)}">${s.tabs.map(t =>
-        `<a href="${t.href}"${t.key === tab ? ' class="active" aria-current="page"' : ''}>${esc(t.label)}</a>`).join('')}</nav>` : '') +
-        (s.feature && isDev && features[s.feature] === false
-          ? `<div class="msg info">Members don't see ${esc(s.label)} yet: it's switched off for them in
-              <a href="settings.html">Developers &gt; Settings &gt; App settings</a>. Developers still see it.</div>` : '');
+      head.innerHTML = `<h1>${esc(s.label)}</h1>` + (s.tabs ? `<nav class="tabs" aria-label="${esc(s.label)}">${s.tabs
+        .filter(t => !t.feature || features[t.feature]).map(t =>
+        `<a href="${t.href}"${t.key === tab ? ' class="active" aria-current="page"' : ''}>${esc(t.label)}</a>`).join('')}</nav>` : '');
     }
 
     document.querySelectorAll('.program-name').forEach(el => { el.textContent = b.program_name; });
@@ -316,9 +314,13 @@ window.STA = (function () {
       await branding;
       return null;
     }
+    // A switched-off feature is closed to everyone, developers included.
     const s = SECTIONS.find(x => x.key === section);
-    if (s && s.feature && !features[s.feature] && !isDev) {
-      blockPage(s.label, msg('feature_off', { feature: esc(s.label) }));
+    const t = s && s.tabs && s.tabs.find(x => x.key === document.body.dataset.tab);
+    const off = s && (s.feature && !features[s.feature] ? s : t && t.feature && !features[t.feature] ? t : null);
+    if (off) {
+      blockPage(off.label, msg('feature_off', { feature: esc(off.key === 'ratings' ? 'Ratings' : off.label) }) +
+        (isDev ? ' <span class="muted">(Switched off in Developers &gt; Settings &gt; App settings.)</span>' : ''));
       await branding;
       return null;
     }

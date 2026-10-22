@@ -117,8 +117,6 @@ a.link-button { font-size: 13px; color: var(--accent); cursor: pointer; }
 .msg { padding: 10px 12px; border-radius: 6px; font-size: 13px; margin-top: 10px; }
 .msg.error { background: var(--red-bg); border: 1px solid var(--red-border); color: #7a2320; }
 .msg.ok { background: var(--green-bg); border: 1px solid var(--green-border); color: #1d5e30; }
-.msg.info { background: var(--amber-bg); border: 1px solid var(--amber-border); color: #6b4511; margin: 0 0 14px; }
-.msg.info a { color: inherit; }
 .test-banner {
   background: var(--amber-bg);
   border: 1px solid var(--amber-border);

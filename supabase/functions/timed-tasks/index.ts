@@ -154,8 +154,11 @@ Deno.serve(async (req) => {
   const admin = createClient(url, serviceKey);
   const { data: weekTasks, error } = await admin.rpc("claim_due_tasks");
   if (error) return reply({ error: error.message }, 500);
-  // Casual Play game emails, all year round (not tied to a Sunday).
-  const { data: casual, error: casualError } = await admin.rpc("claim_casual_emails");
+  // Casual Play game emails, all year round (not tied to a Sunday), unless
+  // Casual Play is switched off (Settings > App settings).
+  const { data: features } = await admin.from("settings").select("casual_on").maybeSingle();
+  const { data: casual, error: casualError } = features?.casual_on === false
+    ? { data: [], error: null } : await admin.rpc("claim_casual_emails");
   if (casualError) return reply({ error: casualError.message }, 500);
   const tasks = casual.length ? [...weekTasks, { kind: "casual_games", session_id: null, emails: casual }] : weekTasks;
 

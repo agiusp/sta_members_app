@@ -94,15 +94,16 @@
   </section>
 
   <section class="panel">
-    <div class="panel-title">Features members see</div>
-    <p class="muted">Switch a feature Off to hide it from members while they get used to the app: it leaves their menu, and its
-      pages show the "Not available yet" message (App Messages). Developers always see both, to try them out.
-      While My Rating is Off, the Sunday Doubles Scheduler uses each player's Level instead of their Dynamic Level, because
-      players can't yet see or dispute their results. Sunday Game Reviews still record scores, so ratings are ready when it's switched On.</p>
+    <div class="panel-title">Features</div>
+    <p class="muted">Switch a feature Off until the club is ready to roll it out. It's then off for everyone, developers included:
+      it leaves the menu, and its emails stop.
+      <strong>Casual Play</strong> Off also hides Casual Play Settings.
+      <strong>Ratings</strong> Off hides My Rating, Developers &gt; Ratings and the Dynamic Level column, and the Scheduler uses each
+      player's Level. Sunday Game Reviews still work as usual, and their scores are still collected, so ratings are ready when it's switched On.</p>
     <div class="row">
-      <strong style="font-size:14px">On for members:</strong>
+      <strong style="font-size:14px">On:</strong>
       <label class="check"><input type="checkbox" id="featCasual"> Casual Play</label>
-      <label class="check"><input type="checkbox" id="featRating"> My Rating</label>
+      <label class="check"><input type="checkbox" id="featRating"> Ratings</label>
       <button id="saveFeaturesBtn">Save</button>
     </div>
     <div id="featuresMsg"></div>
@@ -337,8 +338,9 @@
     } catch (err) { showMessage($('casualMsg'), err.message); }
   });
 
-  // ---------- App settings: features members see, backups ----------
+  // ---------- App settings: features on or off, backups ----------
   function renderAppSettings(a) {
+    document.querySelector('[data-pane="casual"]').hidden = !a.casual_on;
     $('featCasual').checked = a.casual_on;
     $('featRating').checked = a.rating_on;
     $('backupEmail').value = a.backup_email || '';
@@ -353,7 +355,8 @@
     try {
       renderAppSettings(await rpc('dev_save_features', { p_casual: $('featCasual').checked, p_rating: $('featRating').checked }));
       try { sessionStorage.removeItem('sta-access'); } catch (_) { /* storage blocked */ }
-      showMessage($('featuresMsg'), 'Saved. Members see the change the next time they load a page.', 'ok');
+      showMessage($('featuresMsg'), 'Saved. Everyone sees the change the next time they load a page.', 'ok');
+      setTimeout(() => location.reload(), 1200);  // the menu and these tabs change too
     } catch (err) { showMessage($('featuresMsg'), err.message); }
   });
   $('saveBackupBtn').addEventListener('click', async () => {
@@ -414,7 +417,7 @@
         <img src="${esc(logo || STA.DEFAULT_LOGO)}" alt="">
         <span class="site-name"><span class="brand-name" style="color:${color}">${esc(name)}</span>${sub ? `<span class="brand-sub">${esc(sub)}</span>` : ''}</span>
       </span></div>
-      <div class="site-nav" style="background:${color}"><div class="site-inner"><a class="active">News</a><a>Sunday Doubles</a><a>Casual Play</a></div></div>`;
+      <div class="site-nav" style="background:${color}"><div class="site-inner"><a class="active">News</a><a>Sunday Doubles</a>${STA.features().casual_on ? '<a>Casual Play</a>' : ''}</div></div>`;
     $('previewButton').style.background = color;
     $('previewButton').style.borderColor = color;
     $('previewLink').style.color = color;

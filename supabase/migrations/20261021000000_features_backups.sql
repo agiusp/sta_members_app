@@ -1,6 +1,7 @@
 -- Before going live:
---  - Casual Play and My Rating can each be switched off for members
---    (Developers > Settings > App settings). Developers still see them.
+--  - Casual Play and Ratings can each be switched off for everyone,
+--    developers included (Developers > Settings > App settings); the pages
+--    hide them (app/common.js) and their emails stop.
 --  - Developers can look up any player's rating history (Developers > Ratings).
 --  - Backups: developers can download one at any time, and the app emails one
 --    every week to a private address (the free Supabase plan keeps none).
@@ -8,7 +9,7 @@
 --  - Timed tasks run every minute online, once the project has its two Vault
 --    secrets (see run_timed_tasks below).
 
--- ---------- Features members see ----------
+-- ---------- Features switched on or off ----------
 alter table public.settings
   add column casual_on boolean not null default true,
   add column rating_on boolean not null default true,
@@ -18,7 +19,7 @@ alter table public.settings
   add column backup_sent_at timestamptz,
   add column backup_requested boolean not null default false;
 
--- my_access() also says which features are on for members.
+-- my_access() also says which features are switched on.
 create or replace function public.my_access() returns jsonb
 language sql stable security definer set search_path = public as $$
   select jsonb_build_object(
@@ -55,9 +56,9 @@ begin
 end;
 $$;
 
--- While My Rating is off for members, players can't see or dispute their
--- results, so the Sunday Doubles Scheduler and This week use Level, not the
--- Dynamic Level from My Rating.
+-- While Ratings are switched off, players can't see or dispute their results,
+-- so the Sunday Doubles Scheduler and This week use Level, not the Dynamic
+-- Level from My Rating. Game Reviews still record results.
 create function public.scheduler_levels() returns jsonb
 language sql stable security definer set search_path = public as $$
   select case when (select rating_on from settings) then rating_dynamic_levels() else '{}'::jsonb end;

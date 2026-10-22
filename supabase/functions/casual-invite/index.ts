@@ -27,11 +27,15 @@ Deno.serve(async (req) => {
   const caller = createClient(url, Deno.env.get("SUPABASE_ANON_KEY")!, {
     global: { headers: { Authorization: req.headers.get("Authorization") ?? "" } },
   });
+  const admin = createClient(url, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+  // Casual Play switched off (Settings > App settings): no emails.
+  const { data: on } = await admin.from("settings").select("casual_on").maybeSingle();
+  if (on?.casual_on === false) return reply({ error: "Casual Play is switched off" }, 400);
+
   const { slot_id, others } = await req.json().catch(() => ({}));
   const { data: invite, error } = await caller.rpc("casual_invite", { p_slot_id: slot_id, p_others: others });
   if (error) return reply({ error: error.message }, 400);
 
-  const admin = createClient(url, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
   const [templates, { data: settings }, { data: switches }] = await Promise.all([
     E.loadTemplates(admin),
     admin.from("settings").select("program_name").maybeSingle(),

@@ -1,5 +1,5 @@
-// End-to-end test of the go-live additions: switching Casual Play and My
-// Rating off for members, developers' Player history, and backups (weekly
+// End-to-end test of the go-live additions: switching Casual Play and
+// Ratings off for everyone, developers' Player history, and backups (weekly
 // email, download, restore). LOCAL Supabase only. Run all tests with: tests/run.sh
 import { writeFileSync, mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -19,7 +19,7 @@ const alice = await acceptInvite('alice.johnson@example.com', PW);
 const members = await rpcOk(dev, 'dev_members');
 const devPlayer = members.find(m => m.email === 'dev@example.com');
 
-console.log('Features members see');
+console.log('Switching features off');
 await check('Casual Play and My Rating are on by default, and my_access says so', async () => {
   const a = await rpcOk(alice, 'my_access');
   assert.equal(a.casual_on, true);
@@ -36,6 +36,12 @@ await check('only developers switch them, and members see the change', async () 
   assert.equal(a.casual_on, false);
   assert.equal(a.rating_on, false);
   await rpcFails(dev, 'dev_save_features', { p_casual: null, p_rating: true }, /On or Off/);
+});
+
+await check('while Casual Play is off, its emails stop', async () => {
+  const r = await call('/functions/v1/casual-invite', { token: alice, body: { slot_id: 1, others: [] } });
+  assert.equal(r.status, 400);
+  assert.match(r.data.error, /switched off/);
 });
 
 await check('while My Rating is off, the Scheduler uses Level instead of Dynamic Level', async () => {
